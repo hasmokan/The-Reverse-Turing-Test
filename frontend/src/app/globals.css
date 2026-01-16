@@ -45,27 +45,138 @@ button:active {
   -webkit-user-select: none;
 }
 
-/* 自定义滚动条 */
+/* 自定义滚动条 - 儿童画风格 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+  background: linear-gradient(90deg, #FFE5E5 0%, #E5F5FF 100%);
+  border-radius: 10px;
+  border: 2px dashed #FFB6C1;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+  background: linear-gradient(135deg, #FF6B9D 0%, #FFA06B 100%);
+  border-radius: 10px;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+  background: linear-gradient(135deg, #FF5A8F 0%, #FF8F5A 100%);
+  transform: scale(1.1);
 }
 
-/* 动画工具类 */
+/* ========== 儿童画风格效果 ========== */
+
+/* 手绘边框 - 歪斜不规则效果 */
+.hand-drawn-border {
+  border: 3px solid currentColor;
+  border-radius: 20px 25px 22px 28px / 25px 22px 28px 20px;
+  box-shadow:
+    3px 3px 0 rgba(0,0,0,0.1),
+    -1px -1px 0 rgba(255,255,255,0.5);
+}
+
+/* 手绘按钮效果 */
+.hand-drawn-button {
+  border: 3px solid currentColor;
+  border-radius: 18px 25px 20px 23px / 23px 20px 25px 18px;
+  transform: rotate(-1deg);
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  box-shadow:
+    4px 4px 0 rgba(0,0,0,0.15),
+    -2px -2px 0 rgba(255,255,255,0.4) inset;
+}
+
+.hand-drawn-button:hover {
+  transform: rotate(1deg) scale(1.05);
+  box-shadow:
+    6px 6px 0 rgba(0,0,0,0.2),
+    -2px -2px 0 rgba(255,255,255,0.5) inset;
+}
+
+.hand-drawn-button:active {
+  transform: rotate(0deg) scale(0.95);
+  box-shadow:
+    2px 2px 0 rgba(0,0,0,0.2),
+    -1px -1px 0 rgba(255,255,255,0.3) inset;
+}
+
+/* 涂鸦卡片效果 */
+.scribble-card {
+  border: 4px solid;
+  border-radius: 25px 30px 28px 32px / 30px 28px 32px 25px;
+  transform: rotate(-0.5deg);
+  box-shadow:
+    5px 5px 0 rgba(0,0,0,0.1),
+    10px 10px 20px rgba(0,0,0,0.15);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%);
+}
+
+.scribble-card:hover {
+  transform: rotate(0.5deg) translateY(-4px);
+  box-shadow:
+    6px 6px 0 rgba(0,0,0,0.15),
+    12px 12px 25px rgba(0,0,0,0.2);
+}
+
+/* 蜡笔质感背景 */
+.crayon-texture {
+  position: relative;
+  overflow: hidden;
+}
+
+.crayon-texture::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.1) 2px,
+      rgba(255, 255, 255, 0.1) 4px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.1) 2px,
+      rgba(255, 255, 255, 0.1) 4px
+    );
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* 彩虹渐变按钮 */
+.rainbow-gradient {
+  background: linear-gradient(
+    135deg,
+    #FF6B9D 0%,
+    #FFA06B 15%,
+    #FFD66B 30%,
+    #A8E6CF 50%,
+    #86C5FF 70%,
+    #A78BFA 85%,
+    #FF6B9D 100%
+  );
+  background-size: 200% 200%;
+  animation: rainbow-shift 3s ease infinite;
+}
+
+@keyframes rainbow-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ========== 动画效果 ========== */
+
+/* 浮动动画 - 温柔版 */
 @keyframes float-gentle {
   0%, 100% {
     transform: translateY(0) rotate(0deg);
@@ -82,16 +193,121 @@ button:active {
   animation: float-gentle 4s ease-in-out infinite;
 }
 
-/* 危险状态脉冲 */
-@keyframes danger-pulse {
+/* 抖动动画 - 儿童画风格 */
+@keyframes wobble-shake {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    transform: rotate(-2deg) translateX(0);
+  }
+  25% {
+    transform: rotate(2deg) translateX(-2px);
   }
   50% {
-    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    transform: rotate(-1deg) translateX(2px);
+  }
+  75% {
+    transform: rotate(1deg) translateX(-1px);
+  }
+}
+
+.animate-wobble-shake {
+  animation: wobble-shake 0.5s ease-in-out;
+}
+
+/* 弹跳动画 */
+@keyframes bounce-fun {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-15px) scale(1.05);
+  }
+}
+
+.animate-bounce-fun {
+  animation: bounce-fun 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* 危险状态脉冲 - 增强版 */
+@keyframes danger-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(239, 68, 68, 0.7),
+      0 0 20px rgba(239, 68, 68, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 15px rgba(239, 68, 68, 0),
+      0 0 30px rgba(239, 68, 68, 0.5);
+    transform: scale(1.05);
   }
 }
 
 .animate-danger-pulse {
   animation: danger-pulse 1.5s ease-in-out infinite;
+}
+
+/* 闪烁星星效果 */
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(180deg);
+  }
+}
+
+.animate-sparkle {
+  animation: sparkle 1.5s ease-in-out infinite;
+}
+
+/* 涂鸦线条绘制动画 */
+@keyframes draw-line {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-draw-line {
+  stroke-dasharray: 1000;
+  animation: draw-line 2s ease-out forwards;
+}
+
+/* 悬停弹跳 */
+@keyframes hover-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.hover-bounce:hover {
+  animation: hover-bounce 0.5s ease-in-out infinite;
+}
+
+/* 旋转摇摆 */
+@keyframes wiggle-rotate {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+.animate-wiggle {
+  animation: wiggle-rotate 1s ease-in-out infinite;
+}
+
+/* 脉冲缩放 */
+@keyframes pulse-scale {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.animate-pulse-scale {
+  animation: pulse-scale 2s ease-in-out infinite;
 }

@@ -1,3 +1,11 @@
+// 评论类型
+export interface Comment {
+  id: string
+  author: string
+  content: string
+  createdAt: number
+}
+
 // 游戏物体类型
 export interface GameItem {
   id: string
@@ -12,6 +20,7 @@ export interface GameItem {
   rotation: number
   scale: number
   flipX: boolean
+  comments: Comment[]
 }
 
 export interface Position {
@@ -86,3 +95,4 @@ export type WSEventType =
   | 'vote:end'
   | 'game:over'
   | 'sync:state'
+  | 'comment:add'

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useGameStore } from '@/lib/store'
-import { GameItem, WSEventType } from '@/types'
+import { GameItem, WSEventType, Comment } from '@/types'
 
 interface UseWebSocketOptions {
   url?: string
@@ -13,7 +13,7 @@ interface UseWebSocketOptions {
 
 export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOptions) {
   const socketRef = useRef<Socket | null>(null)
-  const { addItem, removeItem, syncState, startVoting, endVoting, castVote, setGameOver } =
+  const { addItem, removeItem, syncState, startVoting, endVoting, castVote, setGameOver, addComment } =
     useGameStore()
 
   // 连接 WebSocket
@@ -79,6 +79,12 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
       setGameOver()
     })
 
+    // 收到评论
+    socket.on('comment:add', ({ itemId, comment }: { itemId: string; comment: Omit<Comment, 'id' | 'createdAt'> }) => {
+      console.log('[WS] Comment added:', itemId, comment)
+      addComment(itemId, comment)
+    })
+
     // 断开连接
     socket.on('disconnect', () => {
       console.log('[WS] Disconnected from server')
@@ -93,7 +99,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
       socket.emit('room:leave', { roomId })
       socket.disconnect()
     }
-  }, [url, roomId, enabled, addItem, removeItem, syncState, startVoting, endVoting, castVote, setGameOver])
+  }, [url, roomId, enabled, addItem, removeItem, syncState, startVoting, endVoting, castVote, setGameOver, addComment])
 
   // 发送事件
   const emit = useCallback((event: WSEventType, data?: unknown) => {
@@ -118,11 +124,23 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     [emit]
   )
 
+  // 提交评论
+  const submitComment = useCallback(
+    (itemId: string, comment: Omit<Comment, 'id' | 'createdAt'>) => {
+      // 本地立即添加评论
+      addComment(itemId, comment)
+      // 通过 WebSocket 广播给其他玩家
+      emit('comment:add', { itemId, comment })
+    },
+    [emit, addComment]
+  )
+
   return {
     socket: socketRef.current,
     emit,
     submitItem,
     initiateVote,
+    submitComment,
     isConnected: socketRef.current?.connected ?? false,
   }
 }

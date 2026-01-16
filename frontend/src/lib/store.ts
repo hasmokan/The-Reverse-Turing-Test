@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { GameState, GameItem, GamePhase, ThemeConfig } from '@/types'
+import { GameState, GameItem, GamePhase, ThemeConfig, Comment } from '@/types'
 import { fishTankTheme } from '@/config/themes'
 import { generateId, randomRange, calculateTurbidity } from '@/lib/utils'
 
@@ -8,10 +8,11 @@ interface GameStore extends GameState {
   setPhase: (phase: GamePhase) => void
   setRoomId: (roomId: string) => void
   setTheme: (theme: ThemeConfig) => void
-  addItem: (item: Omit<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX'>) => void
+  addItem: (item: Omit<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX' | 'comments'>) => void
   removeItem: (itemId: string) => void
   updateItemPosition: (itemId: string, x: number, y: number) => void
   updateItem: (itemId: string, updates: Partial<GameItem>) => void
+  addComment: (itemId: string, comment: Omit<Comment, 'id' | 'createdAt'>) => void
   startVoting: (item: GameItem) => void
   endVoting: () => void
   castVote: (itemId: string) => void
@@ -59,6 +60,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rotation: randomRange(-5, 5),
       scale: randomRange(0.8, 1.2),
       flipX: direction < 0, // 根据移动方向决定朝向
+      comments: [], // 初始化空评论列表
     }
 
     set((state) => {
@@ -103,6 +105,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set((state) => ({
       items: state.items.map((item) =>
         item.id === itemId ? { ...item, ...updates } : item
+      ),
+    }))
+  },
+
+  addComment: (itemId, commentData) => {
+    const newComment = {
+      ...commentData,
+      id: generateId(),
+      createdAt: Date.now(),
+    }
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === itemId
+          ? { ...item, comments: [...item.comments, newComment] }
+          : item
       ),
     }))
   },

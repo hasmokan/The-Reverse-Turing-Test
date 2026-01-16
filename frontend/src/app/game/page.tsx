@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
-import { GameItem } from '@/types'
+import { GameItem, Comment } from '@/types'
 import DrawingCanvas, { type DrawingCanvasRef } from '@/components/canvas/DrawingCanvas'
 import GameStage from '@/components/stage/GameStage'
 import GameHeader from '@/components/ui/GameHeader'
@@ -17,6 +17,7 @@ export default function GamePage() {
   const castVote = useGameStore((state) => state.castVote)
   const startVoting = useGameStore((state) => state.startVoting)
   const resetGame = useGameStore((state) => state.resetGame)
+  const addComment = useGameStore((state) => state.addComment)
 
   const canvasRef = useRef<DrawingCanvasRef>(null)
   const [showDrawing, setShowDrawing] = useState(false)
@@ -54,6 +55,11 @@ export default function GamePage() {
     setShowItemModal(false)
   }
 
+  // 处理评论
+  const handleComment = (itemId: string, comment: Omit<Comment, 'id' | 'createdAt'>) => {
+    addComment(itemId, comment)
+  }
+
   // 完成绘画 - 从画布导出真实图片
   const handleFinishDrawing = () => {
     const imageUrl = canvasRef.current?.exportImage()
@@ -63,7 +69,7 @@ export default function GamePage() {
   }
 
   return (
-    <main className="h-screen flex flex-col p-4 safe-area-inset">
+    <main className="h-screen flex flex-col p-4 safe-area-inset bg-gradient-to-br from-yellow-50 via-pink-50 to-blue-100 crayon-texture">
       {/* 投票倒计时 */}
       <VotingTimer />
 
@@ -85,21 +91,23 @@ export default function GamePage() {
 
               {/* 完成按钮 */}
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.08, rotate: 2 }}
+                whileTap={{ scale: 0.92, rotate: -2 }}
                 onClick={handleFinishDrawing}
-                className="absolute bottom-4 right-4 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-full font-bold shadow-lg"
+                className="absolute bottom-4 right-4 px-8 py-4 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-full font-bold text-lg shadow-2xl hand-drawn-button border-green-600"
               >
                 完成 ✓
               </motion.button>
 
               {/* 返回按钮 */}
-              <button
+              <motion.button
+                whileHover={{ scale: 1.05, rotate: -2 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setShowDrawing(false)}
-                className="absolute bottom-4 left-4 px-6 py-3 bg-gray-500 text-white rounded-full font-medium shadow-lg"
+                className="absolute bottom-4 left-4 px-8 py-4 bg-gradient-to-r from-gray-400 to-gray-500 text-white rounded-full font-bold shadow-xl hand-drawn-button border-gray-600"
               >
                 ← 返回
-              </button>
+              </motion.button>
             </motion.div>
           ) : (
             <motion.div
@@ -123,18 +131,30 @@ export default function GamePage() {
           className="mt-4 flex gap-3"
         >
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.05, rotate: -1 }}
+            whileTap={{ scale: 0.95, rotate: 1 }}
             onClick={() => setShowDrawing(true)}
-            className="flex-1 py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-2xl font-bold text-lg shadow-lg"
+            className="flex-1 py-5 rainbow-gradient text-white rounded-3xl font-bold text-xl shadow-2xl hand-drawn-button border-pink-500 relative overflow-hidden group"
           >
-            🎨 画一个！
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              🎨 画一个！
+            </span>
+            {/* 悬停星星效果 */}
+            <motion.div
+              className="absolute top-2 right-2 text-2xl"
+              animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              ✨
+            </motion.div>
           </motion.button>
 
           {/* 开发模式：添加测试 AI */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 10 }}
+            whileTap={{ scale: 0.9 }}
             onClick={() => {
-              const testAI: Omit<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX'> = {
+              addItem({
                 imageUrl: `data:image/svg+xml,${encodeURIComponent(`
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
                     <ellipse cx="50" cy="50" rx="35" ry="25" fill="#FF6B6B" stroke="#333" stroke-width="3"/>
@@ -147,26 +167,27 @@ export default function GamePage() {
                 author: '匿名艺术家',
                 isAI: true,
                 createdAt: Date.now(),
-              }
-              addItem(testAI)
+              })
             }}
-            className="px-4 py-4 bg-gray-200 text-gray-600 rounded-2xl font-medium"
+            className="px-5 py-5 bg-gradient-to-br from-blue-200 to-purple-200 text-gray-700 rounded-3xl font-bold text-2xl shadow-lg hand-drawn-button border-purple-400"
           >
             🤖
-          </button>
+          </motion.button>
 
           {/* 测试投票 */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: -10 }}
+            whileTap={{ scale: 0.9 }}
             onClick={() => {
               const items = useGameStore.getState().items
               if (items.length > 0) {
                 startVoting(items[0])
               }
             }}
-            className="px-4 py-4 bg-orange-200 text-orange-600 rounded-2xl font-medium"
+            className="px-5 py-5 bg-gradient-to-br from-orange-200 to-red-200 text-orange-700 rounded-3xl font-bold text-2xl shadow-lg hand-drawn-button border-orange-400"
           >
             🗳️
-          </button>
+          </motion.button>
         </motion.div>
       )}
 
@@ -178,12 +199,18 @@ export default function GamePage() {
           className="mt-4"
         >
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.05, rotate: -2 }}
+            whileTap={{ scale: 0.95, rotate: 2 }}
             onClick={resetGame}
-            className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-2xl font-bold text-lg shadow-lg"
+            className="w-full py-5 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-3xl font-bold text-xl shadow-2xl hand-drawn-button border-green-600 relative overflow-hidden"
           >
-            🔄 重新开始
+            <span className="relative z-10">🔄 重新开始</span>
+            {/* 闪烁效果 */}
+            <motion.div
+              className="absolute inset-0 bg-white"
+              animate={{ opacity: [0, 0.3, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            />
           </motion.button>
         </motion.div>
       )}
@@ -205,6 +232,7 @@ export default function GamePage() {
         isOpen={showItemModal}
         onClose={() => setShowItemModal(false)}
         onVote={handleVote}
+        onComment={handleComment}
       />
     </main>
   )
