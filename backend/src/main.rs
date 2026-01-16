@@ -99,6 +99,10 @@ fn api_routes(state: Arc<AppState>) -> Router {
         // Themes
         .route("/themes", get(routes::themes::list_themes))
         .route("/themes/:theme_id", get(routes::themes::get_theme))
+        .route(
+            "/themes/:theme_id/room",
+            get(routes::themes::get_or_create_room_by_theme),
+        )
         // Rooms
         .route("/rooms", post(routes::rooms::create_room))
         .route("/rooms/:room_code", get(routes::rooms::get_room))
