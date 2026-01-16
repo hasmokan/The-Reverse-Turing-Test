@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600">
+  <defs>
+    <linearGradient id="cafeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f5e6d3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d4a574;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect fill="url(#cafeGradient)" width="400" height="600"/>
+
+  <!-- 木纹桌面 -->
+  <rect fill="#8B4513" y="500" width="400" height="100" opacity="0.3"/>
+  <g stroke="#6F4E37" stroke-width="1" opacity="0.2">
+    <line x1="0" y1="520" x2="400" y2="520"/>
+    <line x1="0" y1="540" x2="400" y2="540"/>
+    <line x1="0" y1="560" x2="400" y2="560"/>
+    <line x1="0" y1="580" x2="400" y2="580"/>
+  </g>
+
+  <!-- 窗户 -->
+  <rect x="50" y="50" width="120" height="150" fill="#87CEEB" stroke="#6F4E37" stroke-width="4"/>
+  <line x1="110" y1="50" x2="110" y2="200" stroke="#6F4E37" stroke-width="2"/>
+  <line x1="50" y1="125" x2="170" y2="125" stroke="#6F4E37" stroke-width="2"/>
+
+  <rect x="230" y="50" width="120" height="150" fill="#87CEEB" stroke="#6F4E37" stroke-width="4"/>
+  <line x1="290" y1="50" x2="290" y2="200" stroke="#6F4E37" stroke-width="2"/>
+  <line x1="230" y1="125" x2="350" y2="125" stroke="#6F4E37" stroke-width="2"/>
+
+  <!-- 装饰画框 -->
+  <rect x="170" y="250" width="60" height="80" fill="#FFF8DC" stroke="#6F4E37" stroke-width="3"/>
+
+  <!-- 蒸汽装饰 -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.3">
+    <path d="M100 450 Q110 430 100 410 Q90 390 100 370"/>
+    <path d="M300 450 Q310 430 300 410 Q290 390 300 370"/>
+  </g>
+</svg>
