@@ -1,13 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600">
   <defs>
     <linearGradient id="waterGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a5fb4;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#0d3b6e;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#062140;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#87CEEB;stop-opacity:1" />
+      <stop offset="40%" style="stop-color:#5BC0DE;stop-opacity:1" />
+      <stop offset="70%" style="stop-color:#4AB3D6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3A9FC5;stop-opacity:1" />
     </linearGradient>
     <linearGradient id="sandGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#d4a574;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#a67c52;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#F5DEB3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#DEB887;stop-opacity:1" />
     </linearGradient>
   </defs>
 
@@ -18,7 +19,7 @@
   <path d="M0 550 Q100 530 200 545 Q300 560 400 540 L400 600 L0 600 Z" fill="url(#sandGradient)"/>
 
   <!-- 水草 -->
-  <g fill="#2d5016" opacity="0.7">
+  <g fill="#5cb85c" opacity="0.8">
     <path d="M50 600 Q40 550 50 500 Q60 450 45 400 Q55 450 60 500 Q50 550 60 600 Z"/>
     <path d="M70 600 Q60 560 70 520 Q80 480 65 440 Q75 480 80 520 Q70 560 80 600 Z"/>
     <path d="M330 600 Q320 540 330 480 Q340 420 325 360 Q335 420 340 480 Q330 540 340 600 Z"/>
@@ -26,12 +27,12 @@
   </g>
 
   <!-- 石头 -->
-  <ellipse cx="100" cy="570" rx="30" ry="15" fill="#6b7280"/>
-  <ellipse cx="300" cy="565" rx="25" ry="12" fill="#4b5563"/>
-  <ellipse cx="320" cy="575" rx="20" ry="10" fill="#6b7280"/>
+  <ellipse cx="100" cy="570" rx="30" ry="15" fill="#9CA3AF"/>
+  <ellipse cx="300" cy="565" rx="25" ry="12" fill="#6B7280"/>
+  <ellipse cx="320" cy="575" rx="20" ry="10" fill="#9CA3AF"/>
 
   <!-- 气泡装饰 -->
-  <g fill="#ffffff" opacity="0.2">
+  <g fill="#ffffff" opacity="0.4">
     <circle cx="80" cy="200" r="5"/>
     <circle cx="320" cy="150" r="3"/>
     <circle cx="150" cy="300" r="4"/>
