@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  who-is-undercover:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 视觉模型 API 配置（ModelScope Qwen3-VL）
+        - NEXT_PUBLIC_VISION_API_URL=${NEXT_PUBLIC_VISION_API_URL:-https://api-inference.modelscope.cn/v1}
+        - NEXT_PUBLIC_VISION_API_KEY=${NEXT_PUBLIC_VISION_API_KEY}
+        - NEXT_PUBLIC_VISION_MODEL=${NEXT_PUBLIC_VISION_MODEL:-Qwen/Qwen3-VL-235B-A22B-Instruct}
+        - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-}
+    image: who-is-undercover:latest
+    container_name: who-is-undercover
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

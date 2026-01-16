@@ -1,9 +1,11 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { useGameStore } from '@/lib/store'
 
 export function GameHeader() {
+  const router = useRouter()
   const totalItems = useGameStore((state) => state.totalItems)
   const aiCount = useGameStore((state) => state.aiCount)
   const theme = useGameStore((state) => state.theme)
@@ -11,6 +13,11 @@ export function GameHeader() {
 
   const maxAI = theme?.game_rules.max_imposters || 5
   const dangerLevel = aiCount / maxAI
+
+  // 返回首页
+  const handleGoHome = () => {
+    router.push('/')
+  }
 
   return (
     <motion.div
@@ -25,22 +32,36 @@ export function GameHeader() {
         }} />
       </div>
 
-      {/* 主题名称 */}
-      <motion.div
-        whileHover={{ scale: 1.05, rotate: -2 }}
-        className="flex items-center gap-2 relative z-10"
-      >
-        <motion.span
-          animate={{ rotate: [0, -10, 10, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="text-3xl"
+      {/* 左侧：返回按钮 + 主题名称 */}
+      <div className="flex items-center gap-3 relative z-10">
+        {/* 返回首页按钮 */}
+        <motion.button
+          onClick={handleGoHome}
+          whileHover={{ scale: 1.1, x: -3 }}
+          whileTap={{ scale: 0.9 }}
+          className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-full border-2 border-gray-300 shadow-md hover:border-purple-400 transition-colors"
+          title="返回首页"
         >
-          🐠
-        </motion.span>
-        <span className="font-bold text-lg text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 font-sketch">
-          {theme?.theme_name || '深海鱼缸'}
-        </span>
-      </motion.div>
+          <span className="text-lg">🏠</span>
+        </motion.button>
+
+        {/* 主题名称 */}
+        <motion.div
+          whileHover={{ scale: 1.05, rotate: -2 }}
+          className="flex items-center gap-2"
+        >
+          <motion.span
+            animate={{ rotate: [0, -10, 10, 0] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className="text-3xl"
+          >
+            🐠
+          </motion.span>
+          <span className="font-bold text-lg text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 font-sketch">
+            {theme?.theme_name || '深海鱼缸'}
+          </span>
+        </motion.div>
+      </div>
 
       {/* 状态指示器 */}
       <div className="flex items-center gap-3 relative z-10">

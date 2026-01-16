@@ -106,7 +106,7 @@ export function GameStage({ onItemClick }: GameStageProps) {
       style={{
         backgroundImage: theme?.assets.background_url
           ? `url(${theme.assets.background_url})`
-          : 'linear-gradient(180deg, #1a5fb4 0%, #0d3b6e 50%, #062140 100%)',
+          : 'linear-gradient(180deg, #87CEEB 0%, #5BC0DE 30%, #4AB3D6 60%, #3A9FC5 100%)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
