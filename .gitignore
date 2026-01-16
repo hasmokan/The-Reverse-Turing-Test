@@ -21,4 +21,33 @@ debug
 #.idea/
 
 *docs/*
-**/.env/**
+
+# Environment files
+.env
+.env.local
+.env*.local
+**/.env
+
+# Node.js (frontend)
+node_modules/
+.next/
+out/
+build/
+dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes (local dev)
+postgres_data/
+redis_data/
