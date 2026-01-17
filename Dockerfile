@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y \
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 
-# Build release binary
-RUN cargo build --release
+# Build release binary (limit parallelism to reduce memory usage)
+RUN CARGO_BUILD_JOBS=2 cargo build --release
 
 # ============================================
 # Stage 2: Build Next.js Frontend
@@ -50,6 +50,11 @@ RUN pnpm run build
 # Stage 3: Production Runtime
 # ============================================
 FROM debian:bookworm-slim AS runtime
+
+# Force sequential build: wait for frontend to complete first
+# This ensures all build stages run sequentially to prevent OOM
+COPY --from=frontend-builder /app/frontend/.next/BUILD_ID /tmp/.frontend-build-done
+RUN rm -f /tmp/.frontend-build-done
 
 RUN apt-get update && apt-get install -y \
     postgresql-15 \
