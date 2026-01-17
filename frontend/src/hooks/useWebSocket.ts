@@ -13,6 +13,7 @@ import {
 } from '@/types/battle'
 import { convertThemeResponse, ThemeResponse } from '@/lib/api'
 import { generateKillToast, generateSelfCaughtToast } from '@/lib/toastMessages'
+import { ENV_CONFIG } from '@/config/env'
 
 interface UseWebSocketOptions {
   url?: string
@@ -147,7 +148,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
   useEffect(() => {
     if (!enabled || !roomId) return
 
-    const socketUrl = url || process.env.NEXT_PUBLIC_WS_URL || ''
+    const socketUrl = url || ENV_CONFIG.WS_URL
 
     console.log('[WS] Connecting to:', socketUrl, 'Room:', roomId)
 

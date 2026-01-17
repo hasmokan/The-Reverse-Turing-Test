@@ -4,10 +4,12 @@
  * API 文档: https://platform.stepfun.com/docs/llm/vision
  */
 
-// API 配置 - 从环境变量读取
-const VISION_API_URL = process.env.NEXT_PUBLIC_VISION_API_URL || 'https://api.stepfun.com/v1'
-const VISION_API_KEY = process.env.NEXT_PUBLIC_VISION_API_KEY || ''
-const VISION_MODEL = process.env.NEXT_PUBLIC_VISION_MODEL || 'step-1o-turbo-vision'
+import { ENV_CONFIG } from '@/config/env'
+
+// API 配置 - 从配置文件读取
+const VISION_API_URL = ENV_CONFIG.VISION_API_URL
+const VISION_API_KEY = ENV_CONFIG.VISION_API_KEY
+const VISION_MODEL = ENV_CONFIG.VISION_MODEL
 
 export interface ImageReviewResult {
   isValid: boolean

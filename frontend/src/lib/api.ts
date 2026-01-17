@@ -3,7 +3,9 @@
  * 对接 Rust 后端 REST API
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
+import { ENV_CONFIG } from '@/config/env'
+
+const API_BASE = ENV_CONFIG.API_URL
 
 // ============ 类型定义 ============
 
