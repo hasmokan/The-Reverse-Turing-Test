@@ -148,15 +148,26 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
   useEffect(() => {
     if (!enabled || !roomId) return
 
-    const socketUrl = url || ENV_CONFIG.WS_URL
+    // 检测是否在 HTTPS 环境
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
 
-    console.log('[WS] Connecting to:', socketUrl, 'Room:', roomId)
+    // HTTPS 环境使用相对路径（走代理），强制使用轮询模式
+    // HTTP 环境直接连接后端，优先使用 WebSocket
+    const socketUrl = isHttps ? '' : (url || ENV_CONFIG.WS_URL)
+    const transports: ('websocket' | 'polling')[] = isHttps ? ['polling'] : ['websocket', 'polling']
+
+    console.log('[WS] Connecting to:', socketUrl || '(relative path)', 'Room:', roomId, 'Transports:', transports)
 
     socketRef.current = io(socketUrl, {
-      transports: ['websocket', 'polling'],
+      transports,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
+      // HTTPS 环境下的额外配置
+      ...(isHttps && {
+        path: '/socket.io',
+        withCredentials: false,
+      }),
     })
 
     const socket = socketRef.current
