@@ -1,0 +1,58 @@
+name: Sync Frontend to ModelScope
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+
+jobs:
+  sync-to-modelscope:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git LFS
+        run: |
+          git lfs install
+
+      - name: Clone ModelScope repository
+        run: |
+          git clone http://oauth2:${{ secrets.MODELSCOPE_TOKEN }}@www.modelscope.cn/studios/hasmokan/The-Reverse-Turing-Test.git modelscope-repo
+
+      - name: Sync frontend to ModelScope repo
+        run: |
+          # Remove all files except .git, .gitattributes, README.md
+          cd modelscope-repo
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.gitattributes' ! -name 'README.md' -exec rm -rf {} +
+
+          # Copy frontend files (exclude unnecessary files)
+          cd ..
+          rsync -av \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='.next' \
+            --exclude='.env' \
+            --exclude='tsconfig.tsbuildinfo' \
+            frontend/ modelscope-repo/
+
+      - name: Commit and push to ModelScope
+        run: |
+          cd modelscope-repo
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Check if there are changes
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git add .
+          git commit -m "sync: Update frontend from GitHub commit ${{ github.sha }}"
+          git push origin master
