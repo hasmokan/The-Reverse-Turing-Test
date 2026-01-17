@@ -23,6 +23,11 @@ RUN cargo build --release
 # ============================================
 FROM node:20-slim AS frontend-builder
 
+# Force sequential build: wait for backend to complete first
+# This prevents OOM when both builds run in parallel
+COPY --from=backend-builder /app/backend/target/release/mimic-backend /tmp/.backend-build-done
+RUN rm -f /tmp/.backend-build-done
+
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
