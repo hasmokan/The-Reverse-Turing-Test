@@ -11,11 +11,10 @@
 导入后需要配置 Zenmux API 凭证：
 
 1. 点击 **Settings** → **Credentials**
-2. 点击 **Add Credential** → **Header Auth**
+2. 点击 **Add Credential** → **Bearer Auth**
 3. 配置:
    - **Name**: `Zenmux API`
-   - **Header Name**: `Authorization`
-   - **Header Value**: `Bearer sk-ai-v1-e6c5428815770b31e53348538a2a1c0415a09071292199a920c0f2f031871fa6`
+   - **Token**: `sk-ai-v1-e6c5428815770b31e53348538a2a1c0415a09071292199a920c0f2f031871fa6`
 4. 保存
 
 ## 激活工作流

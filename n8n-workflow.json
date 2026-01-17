@@ -22,11 +22,11 @@
             "parameters": {
                 "method": "POST",
                 "url": "https://api.zenmux.ai/v1/images/generations",
-                "authentication": "genericCredentialType",
-                "genericAuthType": "httpHeaderAuth",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "httpBearerAuth",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({\n  \"model\": \"gemini-nano-banana-pro\",\n  \"prompt\": `A ${$json.theme.prompt_style} of a ${$json.theme.keywords[Math.floor(Math.random() * $json.theme.keywords.length)]}, colors: ${$json.theme.palette.slice(0, 3).join(', ')}`,\n  \"n\": 1,\n  \"size\": \"256x256\",\n  \"response_format\": \"b64_json\"\n}) }}",
+                "jsonBody": "={{ JSON.stringify({\n  \"model\": \"google/gemini-3-pro-image-preview\",\n  \"prompt\": `A ${$json.theme.prompt_style} of a ${$json.theme.keywords[Math.floor(Math.random() * $json.theme.keywords.length)]}, colors: ${$json.theme.palette.slice(0, 3).join(', ')}`,\n  \"n\": 1,\n  \"size\": \"256x256\",\n  \"response_format\": \"b64_json\"\n}) }}",
                 "options": {
                     "timeout": 60000
                 }
@@ -40,11 +40,12 @@
                 300
             ],
             "credentials": {
-                "httpHeaderAuth": {
+                "httpBearerAuth": {
                     "id": "zenmux-api",
                     "name": "Zenmux API"
                 }
-            }
+            },
+            "onError": "continueErrorOutput"
         },
         {
             "parameters": {
@@ -114,6 +115,13 @@
                 [
                     {
                         "node": "Callback Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Callback Error",
                         "type": "main",
                         "index": 0
                     }

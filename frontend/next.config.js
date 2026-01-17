@@ -11,6 +11,15 @@ const nextConfig = {
       },
     ],
   },
+  // API 代理：转发到后端
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:3001/api/:path*',
+      },
+    ]
+  },
 }
 
 module.exports = nextConfig
