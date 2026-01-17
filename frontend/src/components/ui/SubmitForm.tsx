@@ -21,10 +21,19 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || !description.trim()) return
+    console.log('[SubmitForm] handleSubmit called')
+    console.log('[SubmitForm] hasMinimaxApiKey:', hasMinimaxApiKey())
+    console.log('[SubmitForm] name:', name, 'description:', description)
 
+    if (!name.trim() || !description.trim()) {
+      console.log('[SubmitForm] Validation failed - name or description empty')
+      return
+    }
+
+    console.log('[SubmitForm] Starting AI review...')
     // 进行 AI 审核
     const reviewResult = await reviewImage(imageUrl)
+    console.log('[SubmitForm] Review result:', reviewResult)
 
     // 审核通过，延迟后提交
     if (reviewResult.isValid) {
@@ -44,6 +53,8 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
 
   // 渲染审核状态覆盖层
   const renderOverlay = () => {
+    console.log('[SubmitForm] renderOverlay status:', status)
+
     if (status === 'reviewing') {
       return (
         <motion.div
@@ -178,6 +189,51 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
             >
               😈 我就要！
             </motion.button>
+          </motion.div>
+        </motion.div>
+      )
+    }
+
+    // API 错误状态 - 显示友好提示，自动放行
+    if (status === 'error') {
+      return (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 z-10 bg-blue-50/95 backdrop-blur-sm flex flex-col items-center justify-center"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1.2, 1] }}
+            transition={{ duration: 0.5 }}
+            className="text-7xl mb-4"
+          >
+            🤗
+          </motion.div>
+          <motion.h3
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="text-2xl font-bold text-blue-600 font-sketch"
+          >
+            审核服务暂时休息了
+          </motion.h3>
+          <motion.p
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-blue-700 text-sm mt-2 text-center px-4"
+          >
+            没关系，我们相信你的画作很棒！
+          </motion.p>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            className="text-sm text-blue-600 mt-4"
+          >
+            正在放入鱼缸...
           </motion.div>
         </motion.div>
       )

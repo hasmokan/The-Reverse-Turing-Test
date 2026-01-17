@@ -28,7 +28,7 @@ export function GameStage({ onItemClick }: GameStageProps) {
   const theme = useGameStore((state) => state.theme)
   const updateItem = useGameStore((state) => state.updateItem)
 
-  // 物理模拟动画 - 左右游动
+  // 物理模拟动画 - 简单左右游动
   const animate = useCallback(() => {
     const container = containerRef.current
     if (!container) return
@@ -36,9 +36,9 @@ export function GameStage({ onItemClick }: GameStageProps) {
     const width = container.clientWidth
     const height = container.clientHeight
     const padding = 60
+    const time = Date.now() / 1000
 
     items.forEach((item) => {
-      const time = Date.now() / 1000
       // 每个物体有独特的相位偏移
       const phaseOffset = parseInt(item.id, 36) % 100
 
@@ -46,14 +46,15 @@ export function GameStage({ onItemClick }: GameStageProps) {
       let newX = item.position.x + item.velocity.vx
 
       // 垂直方向: 正弦波上下浮动
-      const floatAmplitude = 15
-      const floatSpeed = 0.5 + (phaseOffset % 10) * 0.05
-      const baseY = item.position.y + item.velocity.vy * 0.5
+      const floatAmplitude = 12
+      const floatSpeed = 0.6 + (phaseOffset % 10) * 0.08
+      const baseY = item.position.y + item.velocity.vy * 0.3
       const floatOffset = Math.sin(time * floatSpeed + phaseOffset) * floatAmplitude
-      let newY = baseY + floatOffset * 0.1
+      let newY = baseY + floatOffset * 0.15
 
       // 边缘检测和翻转
       let newVx = item.velocity.vx
+      let newVy = item.velocity.vy
       let newFlipX = item.flipX
 
       // 碰到左右边缘时翻转
@@ -70,16 +71,21 @@ export function GameStage({ onItemClick }: GameStageProps) {
       // 上下边缘软限制
       if (newY < padding) {
         newY = padding
-        item.velocity.vy = Math.abs(item.velocity.vy) * 0.5
+        newVy = Math.abs(newVy) * 0.5
       } else if (newY > height - padding) {
         newY = height - padding
-        item.velocity.vy = -Math.abs(item.velocity.vy) * 0.5
+        newVy = -Math.abs(newVy) * 0.5
       }
+
+      // 轻微旋转跟随垂直运动
+      const targetRotation = newVy * 2
+      const newRotation = item.rotation + (targetRotation - item.rotation) * 0.1
 
       updateItem(item.id, {
         position: { x: newX, y: newY },
-        velocity: { vx: newVx, vy: item.velocity.vy },
+        velocity: { vx: newVx, vy: newVy },
         flipX: newFlipX,
+        rotation: newRotation,
       })
     })
 

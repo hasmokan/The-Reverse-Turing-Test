@@ -33,10 +33,15 @@ export function useImageReview(): UseImageReviewReturn {
 
   const reviewImage = useCallback(
     async (imageBase64: string): Promise<ImageReviewResult> => {
+      console.log('[useImageReview] reviewImage called')
+      console.log('[useImageReview] theme:', theme)
+
       if (!theme) {
+        console.error('[useImageReview] Theme not set!')
         throw new Error('主题未设置')
       }
 
+      console.log('[useImageReview] Setting status to reviewing')
       setStatus('reviewing')
       setError(null)
       setResult(null)
@@ -46,22 +51,29 @@ export function useImageReview(): UseImageReviewReturn {
         themeName: theme.theme_name,
         themeKeywords: theme.ai_settings.keywords,
       }
+      console.log('[useImageReview] options:', options)
 
       try {
         let reviewResult: ImageReviewResult
 
         // 检查是否有 API Key
-        if (hasMinimaxApiKey()) {
+        const hasKey = hasMinimaxApiKey()
+        console.log('[useImageReview] hasMinimaxApiKey():', hasKey)
+
+        if (hasKey) {
+          console.log('[useImageReview] Calling reviewImageWithMiniMax...')
           reviewResult = await reviewImageWithMiniMax(options)
         } else {
           // 无 API Key 时使用模拟审核
-          console.warn('[ImageReview] No API key configured, using mock review')
+          console.warn('[useImageReview] No API key configured, using mock review')
           await new Promise((resolve) => setTimeout(resolve, 1000))
           reviewResult = mockReviewImage(options)
         }
 
+        console.log('[useImageReview] Review completed:', reviewResult)
         setResult(reviewResult)
         setStatus(reviewResult.isValid ? 'approved' : 'rejected')
+        console.log('[useImageReview] Status set to:', reviewResult.isValid ? 'approved' : 'rejected')
 
         return reviewResult
       } catch (err) {

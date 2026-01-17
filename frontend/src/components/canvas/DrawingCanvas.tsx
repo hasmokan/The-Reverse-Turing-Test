@@ -26,8 +26,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
   const outlineCtxRef = useRef<CanvasRenderingContext2D | null>(null)
 
   const [isDrawing, setIsDrawing] = useState(false)
-  const [brushSize, setBrushSize] = useState<1 | 2 | 3>(2) // 勾边模式用
-  const [fillBrushSize, setFillBrushSize] = useState(20) // 填色模式用，可滑动调整
+  const outlineBrushSize = 10 // 勾边模式固定 10px
+  const fillBrushSize = 10 // 填色模式固定 10px
   const [brushMode, setBrushMode] = useState<BrushMode>('outline') // 默认勾边模式
   const [currentColor, setCurrentColor] = useState<string>('#333333') // 勾边默认黑色
   const [history, setHistory] = useState<{ fill: ImageData; outline: ImageData }[]>([])
@@ -51,12 +51,6 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
 
   // 勾边专用颜色（深色系）
   const outlineColors = ['#333333', '#1a1a2e', '#4a4e69', '#22223b', '#3d405b']
-
-  const brushSizes = {
-    1: 4,
-    2: 8,
-    3: 14,
-  }
 
   // 初始化双层画布
   useEffect(() => {
@@ -144,44 +138,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
     setHistoryIndex(newIndex)
   }, [history, historyIndex])
 
-  // 获取触摸/鼠标位置
-  const getPosition = (e: React.TouchEvent | React.MouseEvent): Point => {
-    const canvas = fillCanvasRef.current // 两个画布位置一样，用哪个都行
-    if (!canvas) return { x: 0, y: 0 }
-
-    const rect = canvas.getBoundingClientRect()
-    let clientX: number, clientY: number
-
-    if ('touches' in e) {
-      clientX = e.touches[0].clientX
-      clientY = e.touches[0].clientY
-    } else {
-      clientX = e.clientX
-      clientY = e.clientY
-    }
-
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    }
-  }
-
-  // 获取当前活动的 context（根据笔触模式）
-  const getActiveContext = useCallback(() => {
-    return brushMode === 'outline' ? outlineCtxRef.current : fillCtxRef.current
-  }, [brushMode])
-
-  // 获取当前笔刷大小（根据模式）
-  const getCurrentBrushSize = useCallback(() => {
-    return brushMode === 'outline' ? brushSizes[brushSize] : fillBrushSize
-  }, [brushMode, brushSize, fillBrushSize])
-
   // 绘制带抖动效果的线条
-  const drawLine = (from: Point, to: Point) => {
-    const ctx = getActiveContext()
+  const drawLine = useCallback((from: Point, to: Point) => {
+    const ctx = brushMode === 'outline' ? outlineCtxRef.current : fillCtxRef.current
     if (!ctx) return
 
-    const currentSize = getCurrentBrushSize()
+    const currentSize = brushMode === 'outline' ? outlineBrushSize : fillBrushSize
     ctx.strokeStyle = currentColor
     ctx.lineWidth = currentSize
 
@@ -201,40 +163,68 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
     ctx.quadraticCurveTo(midX, midY, toWobble.x, toWobble.y)
 
     ctx.stroke()
-  }
+  }, [brushMode, currentColor])
 
   // 开始绘制
-  const startDrawing = (e: React.TouchEvent | React.MouseEvent) => {
+  const startDrawing = useCallback((e: TouchEvent | MouseEvent) => {
     e.preventDefault()
-    const point = getPosition(e)
+    const canvas = fillCanvasRef.current
+    if (!canvas) return
+
+    const rect = canvas.getBoundingClientRect()
+    let clientX: number, clientY: number
+
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+
+    const point = { x: clientX - rect.left, y: clientY - rect.top }
     lastPointRef.current = point
     setIsDrawing(true)
 
     // 画一个点
-    const ctx = getActiveContext()
+    const ctx = brushMode === 'outline' ? outlineCtxRef.current : fillCtxRef.current
     if (ctx) {
-      const currentSize = getCurrentBrushSize()
+      const currentSize = brushMode === 'outline' ? outlineBrushSize : fillBrushSize
       ctx.fillStyle = currentColor
       ctx.beginPath()
       ctx.arc(point.x, point.y, currentSize / 2, 0, Math.PI * 2)
       ctx.fill()
     }
-  }
+  }, [brushMode, currentColor])
 
   // 绘制中
-  const draw = (e: React.TouchEvent | React.MouseEvent) => {
+  const draw = useCallback((e: TouchEvent | MouseEvent) => {
     if (!isDrawing) return
     e.preventDefault()
 
-    const point = getPosition(e)
+    const canvas = fillCanvasRef.current
+    if (!canvas) return
+
+    const rect = canvas.getBoundingClientRect()
+    let clientX: number, clientY: number
+
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+
+    const point = { x: clientX - rect.left, y: clientY - rect.top }
     if (lastPointRef.current) {
       drawLine(lastPointRef.current, point)
     }
     lastPointRef.current = point
-  }
+  }, [isDrawing, drawLine])
 
   // 结束绘制
-  const endDrawing = () => {
+  const endDrawing = useCallback(() => {
     if (isDrawing) {
       setIsDrawing(false)
       lastPointRef.current = null
@@ -244,7 +234,32 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
       }
       saveToHistory()
     }
-  }
+  }, [isDrawing, brushMode, saveToHistory])
+
+  // 绑定非被动触摸事件监听器以支持 preventDefault
+  useEffect(() => {
+    const canvas = outlineCanvasRef.current
+    if (!canvas) return
+
+    // 使用 { passive: false } 以允许 preventDefault
+    canvas.addEventListener('touchstart', startDrawing, { passive: false })
+    canvas.addEventListener('touchmove', draw, { passive: false })
+    canvas.addEventListener('touchend', endDrawing)
+    canvas.addEventListener('mousedown', startDrawing)
+    canvas.addEventListener('mousemove', draw)
+    canvas.addEventListener('mouseup', endDrawing)
+    canvas.addEventListener('mouseleave', endDrawing)
+
+    return () => {
+      canvas.removeEventListener('touchstart', startDrawing)
+      canvas.removeEventListener('touchmove', draw)
+      canvas.removeEventListener('touchend', endDrawing)
+      canvas.removeEventListener('mousedown', startDrawing)
+      canvas.removeEventListener('mousemove', draw)
+      canvas.removeEventListener('mouseup', endDrawing)
+      canvas.removeEventListener('mouseleave', endDrawing)
+    }
+  }, [startDrawing, draw, endDrawing])
 
   // 清空画布（双层）
   const clearCanvas = useCallback(() => {
@@ -422,65 +437,18 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
           </motion.button>
         </div>
 
-        {/* 笔刷大小 */}
-        <div className="flex gap-2 items-center">
-          {brushMode === 'outline' ? (
-            // 勾边模式：三个按钮
-            <>
-              {([1, 2, 3] as const).map((size) => (
-                <motion.button
-                  key={size}
-                  onClick={() => setBrushSize(size)}
-                  whileHover={{ scale: 1.15, rotate: size * 5 }}
-                  whileTap={{ scale: 0.9 }}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all hand-drawn-button ${
-                    brushSize === size
-                      ? 'bg-gradient-to-br from-purple-600 to-pink-600 text-white border-purple-700 shadow-lg scale-110'
-                      : 'bg-white border-2 border-gray-300 text-gray-600 hover:border-purple-400'
-                  }`}
-                >
-                  <span
-                    className="rounded-full bg-current"
-                    style={{
-                      width: brushSizes[size] + 2,
-                      height: brushSizes[size] + 2,
-                    }}
-                  />
-                </motion.button>
-              ))}
-            </>
-          ) : (
-            // 填色模式：滑动条
-            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl border-2 border-pink-300 shadow-md">
-              <span className="text-xs font-bold text-gray-500">笔刷</span>
-              <input
-                type="range"
-                min="8"
-                max="60"
-                value={fillBrushSize}
-                onChange={(e) => setFillBrushSize(Number(e.target.value))}
-                className="w-24 h-2 bg-gradient-to-r from-pink-200 to-pink-400 rounded-full appearance-none cursor-pointer
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:w-5
-                  [&::-webkit-slider-thumb]:h-5
-                  [&::-webkit-slider-thumb]:rounded-full
-                  [&::-webkit-slider-thumb]:bg-gradient-to-br
-                  [&::-webkit-slider-thumb]:from-pink-500
-                  [&::-webkit-slider-thumb]:to-orange-400
-                  [&::-webkit-slider-thumb]:border-2
-                  [&::-webkit-slider-thumb]:border-white
-                  [&::-webkit-slider-thumb]:shadow-lg
-                  [&::-webkit-slider-thumb]:cursor-pointer"
-              />
-              <div
-                className="rounded-full bg-gradient-to-br from-pink-500 to-orange-400 border-2 border-white shadow-md"
-                style={{
-                  width: Math.min(fillBrushSize / 2 + 8, 30),
-                  height: Math.min(fillBrushSize / 2 + 8, 30),
-                }}
-              />
-            </div>
-          )}
+        {/* 笔刷大小 - 固定 10px */}
+        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border-2 border-gray-300 shadow-md">
+          <span className="text-xs font-bold text-gray-500">笔刷</span>
+          <div
+            className="rounded-full"
+            style={{
+              width: 10,
+              height: 10,
+              backgroundColor: brushMode === 'outline' ? '#333' : currentColor
+            }}
+          />
+          <span className="text-sm font-bold text-gray-600">10px</span>
         </div>
 
         {/* 撤销/重做/清除 */}
@@ -526,14 +494,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
         <canvas
           ref={outlineCanvasRef}
           className="absolute inset-0 w-full h-full cursor-crosshair"
-          style={{ zIndex: 2 }}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={endDrawing}
-          onMouseLeave={endDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={endDrawing}
+          style={{ zIndex: 2, touchAction: 'none' }}
         />
 
         {/* 网格背景 (视觉参考) - 儿童画风格点状 */}

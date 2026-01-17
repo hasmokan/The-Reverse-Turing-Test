@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { GameItem, Comment } from '@/types'
@@ -24,6 +25,7 @@ import { FloatingDamageLayer, GrabEffect } from '@/components/effects'
 import { VictoryScreen, DefeatScreen } from '@/components/result'
 
 export default function GamePage() {
+  const router = useRouter()
   const phase = useGameStore((state) => state.phase)
   const roomId = useGameStore((state) => state.roomId)
   const setPhase = useGameStore((state) => state.setPhase)
@@ -34,6 +36,8 @@ export default function GamePage() {
   const addComment = useGameStore((state) => state.addComment)
   const gameResult = useGameStore((state) => state.gameResult)
   const setPlayerId = useGameStore((state) => state.setPlayerId)
+  const setPlayerFishId = useGameStore((state) => state.setPlayerFishId)
+  const showToast = useGameStore((state) => state.showToast)
 
   const canvasRef = useRef<DrawingCanvasRef>(null)
   const [showDrawing, setShowDrawing] = useState(false)
@@ -42,6 +46,7 @@ export default function GamePage() {
   const [showItemModal, setShowItemModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [sessionId, setSessionId] = useState<string>('')
+  const [isExporting, setIsExporting] = useState(false) // 导出图片 loading 状态
 
   // 初始化 session ID
   useEffect(() => {
@@ -49,6 +54,13 @@ export default function GamePage() {
     setSessionId(id)
     setPlayerId(id) // 设置玩家 ID
   }, [setPlayerId])
+
+  // 刷新页面时，如果没有 roomId，重定向到首页
+  useEffect(() => {
+    if (!roomId) {
+      router.replace('/')
+    }
+  }, [roomId, router])
 
   // 连接 WebSocket
   const { submitComment, emit, battleVote, retractVote, chaseVote } = useWebSocket({
@@ -75,8 +87,9 @@ export default function GamePage() {
         author_name: '匿名艺术家',
       })
 
-      // 添加到本地 store
+      // 添加到本地 store（保留后端返回的 UUID）
       addItem({
+        id: drawing.id,
         imageUrl: drawing.imageUrl,
         name: drawing.name,
         description: drawing.description || '',
@@ -84,6 +97,9 @@ export default function GamePage() {
         isAI: false,
         createdAt: new Date(drawing.createdAt).getTime(),
       })
+
+      // 设置玩家自己的鱼的 ID（用于判断被攻击）
+      setPlayerFishId(drawing.id)
 
       setPendingImage(null)
       setShowDrawing(false)
@@ -141,11 +157,26 @@ export default function GamePage() {
     submitComment(itemId, comment)
   }
 
-  // 完成绘画 - 从画布导出真实图片
-  const handleFinishDrawing = () => {
-    const imageUrl = canvasRef.current?.exportImage()
-    if (imageUrl) {
-      setPendingImage(imageUrl)
+  // 完成绘画 - 从画布导出真实图片（带防抖和 loading）
+  const handleFinishDrawing = async () => {
+    // 防抖：如果正在导出，忽略点击
+    if (isExporting) return
+
+    setIsExporting(true)
+
+    // 延迟一点让 UI 更新
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    try {
+      const imageUrl = canvasRef.current?.exportImage()
+      if (imageUrl) {
+        setPendingImage(imageUrl)
+      } else {
+        // 画布为空，使用 Toast 提示用户
+        showToast('info', '🎨 画布是空的哦！请先画点东西再提交~')
+      }
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -182,8 +213,8 @@ export default function GamePage() {
       {/* 失败界面 */}
       <DefeatScreen />
 
-      {/* CD 倒计时 HUD */}
-      <CooldownHUD />
+      {/* CD 倒计时 HUD - 绘画面板打开时隐藏 */}
+      {!showDrawing && <CooldownHUD />}
 
       {/* ==================== 原有组件 ==================== */}
 
@@ -224,12 +255,28 @@ export default function GamePage() {
 
               {/* 完成按钮 */}
               <motion.button
-                whileHover={{ scale: 1.08, rotate: 2 }}
-                whileTap={{ scale: 0.92, rotate: -2 }}
+                whileHover={!isExporting ? { scale: 1.08, rotate: 2 } : {}}
+                whileTap={!isExporting ? { scale: 0.92, rotate: -2 } : {}}
                 onClick={handleFinishDrawing}
-                className="absolute bottom-4 right-4 px-8 py-4 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-full font-bold text-lg shadow-2xl hand-drawn-button border-green-600"
+                disabled={isExporting}
+                className={`absolute bottom-4 right-4 px-8 py-4 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-full font-bold text-lg shadow-2xl hand-drawn-button border-green-600 flex items-center gap-2 ${
+                  isExporting ? 'opacity-80 cursor-not-allowed' : ''
+                }`}
               >
-                完成 ✓
+                {isExporting ? (
+                  <>
+                    <motion.span
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      className="inline-block"
+                    >
+                      ⏳
+                    </motion.span>
+                    处理中...
+                  </>
+                ) : (
+                  <>完成 ✓</>
+                )}
               </motion.button>
 
               {/* 返回按钮 */}
@@ -280,46 +327,6 @@ export default function GamePage() {
             >
               ✨
             </motion.div>
-          </motion.button>
-
-          {/* 开发模式：添加测试 AI */}
-          <motion.button
-            whileHover={{ scale: 1.1, rotate: 10 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              addItem({
-                imageUrl: `data:image/svg+xml,${encodeURIComponent(`
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-                    <ellipse cx="50" cy="50" rx="35" ry="25" fill="#FF6B6B" stroke="#333" stroke-width="3"/>
-                    <polygon points="85,50 100,35 100,65" fill="#FF6B6B" stroke="#333" stroke-width="3"/>
-                    <circle cx="35" cy="45" r="5" fill="#333"/>
-                  </svg>
-                `)}`,
-                name: 'AI小鱼',
-                description: '我是一条普通的鱼',
-                author: '匿名艺术家',
-                isAI: true,
-                createdAt: Date.now(),
-              })
-            }}
-            className="px-5 py-5 bg-gradient-to-br from-blue-200 to-purple-200 text-gray-700 rounded-3xl font-bold text-2xl shadow-lg hand-drawn-button border-purple-400"
-          >
-            🤖
-          </motion.button>
-
-          {/* 测试投票 */}
-          <motion.button
-            whileHover={{ scale: 1.1, rotate: -10 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              const items = useGameStore.getState().items
-              if (items.length > 0) {
-                startVoting(items[0])
-              }
-            }}
-            className="px-5 py-5 bg-gradient-to-br from-orange-200 to-red-200 text-orange-700 rounded-3xl font-bold text-2xl shadow-lg hand-drawn-button border-orange-400"
-          >
-            🗳️
           </motion.button>
         </motion.div>
       )}

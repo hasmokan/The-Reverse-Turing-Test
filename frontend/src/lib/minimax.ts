@@ -105,23 +105,46 @@ export async function reviewImageWithMiniMax(
 function buildReviewPrompt(themeName: string, keywords: string[]): string {
   const keywordList = keywords.join('、')
 
-  return `你是一个图像内容审核助手。请分析这张图片，判断它是否符合"${themeName}"主题。
+  return `你是一个专业的简笔画审核助手。请分析这张图片，判断它是否是一幅符合"${themeName}"主题的**丑陋风格简笔画**。
 
-该主题要求绘制的内容应该是以下之一：${keywordList}
+## 主题要求
+绘制的内容应该是：${keywordList}
+
+## 简笔画风格规范（这是一种特定的"丑陋简笔画"风格）
+
+### 整体风格特征：
+- 刻意丑陋、幼稚、粗糙的数字手指画风格
+- 看起来像是用基础画图软件画的，线条抖动不稳定
+- 无压感变化，笔触粗糙简单
+
+### 鱼的形态特征：
+- 单个模糊的、难以辨认的团块，隐约呈现鱼的形状
+- 形状怪异、凹凸不平
+- 轮廓由粗糙的单线构成（固定20px笔刷），线条抖动、可能不闭合
+- 眼睛要么是一个极其粗糙的实心圆点，要么完全没有
+- 没有鱼鳍或极度简化
+- "尾巴"只是一个随机的、不对称的线条延伸
+- 填充线条潦草（5-20px笔刷），可能溢出轮廓边界
+
+### 背景：
+- 应该是纯白色背景，无其他元素
+- 无UI界面、工具栏、手机边框等
 
 请按以下JSON格式回复（不要输出其他内容）：
 {
   "isValid": true/false,
   "confidence": 0-100的置信度数字,
   "detectedContent": "检测到的主要内容描述",
-  "suggestion": "如果不符合主题，给出友好的建议"
+  "suggestion": "如果不符合，给出具体的改进建议"
 }
 
-判断标准：
-1. 图片内容需要能够辨认出是上述主题相关的物体
-2. 儿童简笔画风格是可以接受的，不要求画得很精细
-3. 如果是完全无关的内容（如房子、汽车等），判定为不符合
-4. 如果内容难以辨认但有相关特征，给予通过但置信度较低`
+## 判断标准优先级：
+1. **必须是简笔画风格** - 如果是照片、精细绘画、3D渲染等，直接判定不符合
+2. **必须能识别出鱼的基本特征** - 即使很丑很抽象，也要有类似鱼的轮廓/形态
+3. **颜色应符合5色规则** - 使用了规定颜色之外的颜色会降低置信度
+4. **越丑越幼稚越好** - 画得太精美反而不符合要求
+5. **完全无关内容（如房子、汽车、人物等）判定为不符合**
+6. **空白画布或纯色块判定为不符合**`
 }
 
 /**
@@ -179,13 +202,22 @@ export function mockReviewImage(options: ImageReviewOptions): ImageReviewResult 
  * 检查是否配置了 API Key（优先环境变量，其次 localStorage）
  */
 export function hasMinimaxApiKey(): boolean {
+  // 调试日志
+  console.log('[hasMinimaxApiKey] VISION_API_KEY from env:', VISION_API_KEY)
+  console.log('[hasMinimaxApiKey] VISION_API_KEY length:', VISION_API_KEY?.length)
+
   // 优先检查环境变量
   if (VISION_API_KEY && VISION_API_KEY.length > 10) {
+    console.log('[hasMinimaxApiKey] Using env API key')
     return true
   }
   // 其次检查 localStorage
-  if (typeof window === 'undefined') return false
+  if (typeof window === 'undefined') {
+    console.log('[hasMinimaxApiKey] Running on server, no localStorage')
+    return false
+  }
   const key = localStorage.getItem('vision_api_key')
+  console.log('[hasMinimaxApiKey] localStorage key:', key ? `${key.slice(0, 10)}...` : 'null')
   return Boolean(key && key.length > 10)
 }
 

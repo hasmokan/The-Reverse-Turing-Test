@@ -30,7 +30,7 @@ interface GameStore extends GameState {
   setPhase: (phase: GamePhase) => void
   setRoomId: (roomId: string) => void
   setTheme: (theme: ThemeConfig) => void
-  addItem: (item: Omit<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX' | 'comments'>) => void
+  addItem: (item: Omit<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX' | 'comments'> & Partial<Pick<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX' | 'comments'>>) => void
   removeItem: (itemId: string) => void
   updateItemPosition: (itemId: string, x: number, y: number) => void
   updateItem: (itemId: string, updates: Partial<GameItem>) => void
@@ -123,19 +123,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const direction = Math.random() > 0.5 ? 1 : -1
     const newItem: GameItem = {
       ...itemData,
-      id: generateId(),
-      position: {
+      // 保留后端传入的 ID，仅在没有 ID 时才生成新的
+      id: itemData.id || generateId(),
+      position: itemData.position || {
         x: randomRange(80, 320),
         y: randomRange(80, 400),
       },
-      velocity: {
+      velocity: itemData.velocity || {
         vx: direction * randomRange(0.8, 1.5), // 主要水平移动
         vy: randomRange(-0.2, 0.2), // 轻微垂直移动
       },
-      rotation: randomRange(-5, 5),
-      scale: randomRange(0.8, 1.2),
-      flipX: direction < 0, // 根据移动方向决定朝向
-      comments: [], // 初始化空评论列表
+      rotation: itemData.rotation ?? randomRange(-5, 5),
+      scale: itemData.scale ?? randomRange(0.8, 1.2),
+      flipX: itemData.flipX ?? direction < 0, // 根据移动方向决定朝向
+      comments: itemData.comments || [], // 初始化空评论列表
     }
 
     set((state) => {

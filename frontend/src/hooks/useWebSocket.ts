@@ -69,13 +69,21 @@ function generateRandomPosition(): { x: number; y: number } {
   }
 }
 
-// 生成随机速度
+// 生成随机速度 - 主要左右游动
 function generateRandomVelocity(): { vx: number; vy: number } {
   const direction = Math.random() > 0.5 ? 1 : -1
   return {
-    vx: direction * randomRange(0.8, 1.5),
-    vy: randomRange(-0.2, 0.2),
+    vx: direction * randomRange(0.8, 1.8), // 水平速度
+    vy: randomRange(-0.3, 0.3),            // 轻微垂直浮动
   }
+}
+
+// 检查速度是否有效
+function isValidVelocity(velocity: { vx: number; vy: number } | null | undefined): boolean {
+  if (!velocity) return false
+  if (typeof velocity.vx !== 'number' || typeof velocity.vy !== 'number') return false
+  // 速度太小视为无效
+  return Math.abs(velocity.vx) > 0.1 || Math.abs(velocity.vy) > 0.1
 }
 
 // 转换后端数据为前端格式
@@ -85,9 +93,10 @@ function convertBackendItem(item: BackendGameItem): GameItem {
     ? item.position
     : generateRandomPosition()
 
-  // 如果速度无效，生成随机速度
-  const hasValidVelocity = item.velocity && (item.velocity.vx !== 0 || item.velocity.vy !== 0)
-  const velocity = hasValidVelocity ? item.velocity : generateRandomVelocity()
+  // 如果速度无效，生成随机速度（后端不存储速度，总是需要前端生成）
+  const velocity = isValidVelocity(item.velocity)
+    ? item.velocity
+    : generateRandomVelocity()
 
   // 根据速度方向确定朝向
   const flipX = velocity.vx < 0
