@@ -11,6 +11,12 @@ const nextConfig = {
       },
     ],
   },
+  // 隐藏开发模式下的错误指示器小球
+  devIndicators: {
+    appIsrStatus: false,
+    buildActivity: false,
+    buildActivityPosition: 'bottom-right',
+  },
   // API 代理：转发到后端
   async rewrites() {
     return [

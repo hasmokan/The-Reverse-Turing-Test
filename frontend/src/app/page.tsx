@@ -80,17 +80,16 @@ export default function HomePage() {
       >
         <motion.div
           animate={{
-            rotate: [0, -8, 8, -5, 5, 0],
-            scale: [1, 1.1, 1, 1.05, 1]
+            rotate: 360
           }}
-          transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+          transition={{ repeat: Infinity, duration: 8, ease: 'linear' }}
           className="mb-3 sm:mb-6 filter drop-shadow-2xl"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/backgrounds/20260118-015657.png"
             alt="Logo"
-            className="w-16 h-16 sm:w-24 sm:h-24 md:w-32 md:h-32 mx-auto object-contain"
+            className="w-40 h-40 sm:w-28 sm:h-28 md:w-36 md:h-36 mx-auto object-contain"
           />
         </motion.div>
         <motion.h1
@@ -110,7 +109,7 @@ export default function HomePage() {
           transition={{ delay: 0.4 }}
           className="text-base sm:text-xl md:text-2xl text-pink-600 font-sketch transform rotate-1 mb-1 sm:mb-2"
         >
-          Project Mimic
+          The Reverse Turing Test
         </motion.p>
         <motion.div
           initial={{ scale: 0 }}
@@ -121,6 +120,23 @@ export default function HomePage() {
           <p className="text-sm text-yellow-900 font-bold">
             🎨 画出涂鸦，找出混入的 AI！
           </p>
+        </motion.div>
+
+        {/* 精简版游戏玩法 */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="flex flex-wrap justify-center gap-2 mt-3"
+        >
+          {['🎨 涂鸦', '🤖 AI混入', '🔍 找出', '🗳️ 投票'].map((item, i) => (
+            <span
+              key={i}
+              className="px-2 py-1 bg-white/70 rounded-full text-xs font-medium text-gray-600 border border-gray-200"
+            >
+              {item}
+            </span>
+          ))}
         </motion.div>
       </motion.div>
 
@@ -298,53 +314,6 @@ export default function HomePage() {
             </motion.button>
           )
         })}
-      </motion.div>
-
-      {/* 游戏说明 */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8 }}
-        className="max-w-md mt-8 p-6 scribble-card relative z-10 bg-gradient-to-br from-blue-50 to-purple-50"
-        style={{ borderColor: '#A78BFA' }}
-      >
-        <motion.h3
-          whileHover={{ scale: 1.05, rotate: -2 }}
-          className="font-bold text-xl text-purple-700 mb-4 text-center font-sketch transform -rotate-1"
-        >
-          🎮 游戏玩法
-        </motion.h3>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          {[
-            { icon: '🎨', text: '随意涂鸦创作', delay: 0 },
-            { icon: '🤖', text: 'AI 会混入画作', delay: 0.1 },
-            { icon: '🔍', text: '找出可疑作品', delay: 0.2 },
-            { icon: '🗳️', text: '投票淘汰 AI', delay: 0.3 }
-          ].map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.9 + item.delay }}
-              whileHover={{ scale: 1.1, rotate: i % 2 === 0 ? -5 : 5 }}
-              className="flex items-center gap-2 p-3 bg-white/80 rounded-2xl shadow-sm hand-drawn-border border-2 border-purple-300 hover:shadow-md transition-shadow"
-            >
-              <span className="text-2xl">{item.icon}</span>
-              <span className="font-medium text-gray-700">{item.text}</span>
-            </motion.div>
-          ))}
-        </div>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2 }}
-          whileHover={{ scale: 1.05 }}
-          className="mt-4 p-3 bg-red-100 border-2 border-red-400 rounded-xl text-center transform rotate-1"
-        >
-          <p className="text-sm text-red-700 font-bold">
-            ⚠️ AI 数量超过 5 个则游戏结束！
-          </p>
-        </motion.div>
       </motion.div>
 
       {/* 版本信息 */}

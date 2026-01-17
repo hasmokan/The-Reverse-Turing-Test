@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
@@ -17,12 +17,25 @@ import {
 } from '@/lib/api'
 import useWebSocket from '@/hooks/useWebSocket'
 import { useBattleSystem } from '@/hooks/useBattleSystem'
+import { useDebounceCallback } from '@/hooks/useDebounce'
 
 // 战斗系统组件
 import { ToastContainer, AttackWarning } from '@/components/feedback'
 import { CooldownHUD } from '@/components/hud'
 import { FloatingDamageLayer } from '@/components/effects'
 import { VictoryScreen, DefeatScreen } from '@/components/result'
+
+// 随机作者名字列表
+const RANDOM_AUTHOR_NAMES = [
+  '小明', '阿强', '花花', '大毛', '翠花',
+  '老王', '小李', '阿珍', '铁柱', '建国',
+  '美丽', '胖虎', '小新', '大雄', '静香',
+  '小红', '阿华', '小刚', '丽丽', '小芳'
+]
+
+const getRandomAuthorName = () => {
+  return RANDOM_AUTHOR_NAMES[Math.floor(Math.random() * RANDOM_AUTHOR_NAMES.length)]
+}
 
 export default function GamePage() {
   const router = useRouter()
@@ -84,7 +97,7 @@ export default function GamePage() {
         name,
         description,
         session_id: sessionId,
-        author_name: '匿名艺术家',
+        author_name: getRandomAuthorName(),
       })
 
       // 添加到本地 store（保留后端返回的 UUID）
@@ -181,12 +194,18 @@ export default function GamePage() {
   }
 
   // 复制房间码
-  const copyRoomCode = () => {
+  const copyRoomCode = useCallback(() => {
     if (roomId) {
       navigator.clipboard.writeText(roomId)
       alert(`房间码已复制: ${roomId}`)
     }
-  }
+  }, [roomId])
+
+  // 防抖处理的回调函数
+  const debouncedCopyRoomCode = useDebounceCallback(copyRoomCode, 300)
+  const debouncedShowDrawing = useDebounceCallback(() => setShowDrawing(true), 300)
+  const debouncedHideDrawing = useDebounceCallback(() => setShowDrawing(false), 300)
+  const debouncedResetGame = useDebounceCallback(resetGame, 300)
 
   // 判断是否显示游戏结束界面（由 VictoryScreen/DefeatScreen 处理）
   const showGameOverOverlay = gameResult !== null
@@ -226,7 +245,7 @@ export default function GamePage() {
           className="absolute top-4 right-4 z-10"
         >
           <button
-            onClick={copyRoomCode}
+            onClick={debouncedCopyRoomCode}
             className="px-3 py-1 bg-white/80 rounded-full text-sm font-mono shadow-md hover:bg-white transition-colors"
           >
             🔗 {roomId}
@@ -280,7 +299,7 @@ export default function GamePage() {
               <motion.button
                 whileHover={{ scale: 1.05, rotate: -2 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => setShowDrawing(false)}
+                onClick={debouncedHideDrawing}
                 className="absolute bottom-4 left-4 px-8 py-4 bg-gradient-to-r from-gray-400 to-gray-500 text-white rounded-full font-bold shadow-xl hand-drawn-button border-gray-600"
               >
                 ← 返回
@@ -310,7 +329,7 @@ export default function GamePage() {
           <motion.button
             whileHover={{ scale: 1.05, rotate: -1 }}
             whileTap={{ scale: 0.95, rotate: 1 }}
-            onClick={() => setShowDrawing(true)}
+            onClick={debouncedShowDrawing}
             className="flex-1 py-5 rainbow-gradient text-white rounded-3xl font-bold text-xl shadow-2xl hand-drawn-button border-pink-500 relative overflow-hidden group"
           >
             <span className="relative z-10 flex items-center justify-center gap-2">
@@ -338,7 +357,7 @@ export default function GamePage() {
           <motion.button
             whileHover={{ scale: 1.05, rotate: -2 }}
             whileTap={{ scale: 0.95, rotate: 2 }}
-            onClick={resetGame}
+            onClick={debouncedResetGame}
             className="w-full py-5 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-3xl font-bold text-xl shadow-2xl hand-drawn-button border-green-600 relative overflow-hidden"
           >
             <span className="relative z-10">🔄 重新开始</span>

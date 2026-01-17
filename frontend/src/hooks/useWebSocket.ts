@@ -140,6 +140,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setGameResult,
     triggerElimination,
     playerFishId,
+    addFloatingDamage,
   } = useGameStore()
 
   // 连接 WebSocket
@@ -236,6 +237,19 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     // 票数更新
     socket.on('vote:update', (data: VoteUpdateData) => {
       console.log('[WS] Vote update:', data)
+
+      // 获取鱼的当前位置，显示 +1 动画
+      const targetFish = useGameStore.getState().items.find(item => item.id === data.fishId)
+      if (targetFish) {
+        // 在鱼的位置显示 +1 漂浮伤害
+        addFloatingDamage(
+          data.fishId,
+          targetFish.position.x,
+          targetFish.position.y,
+          1
+        )
+      }
+
       updateFishVotes(data.fishId, data.count, data.voters)
     })
 
@@ -291,6 +305,8 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
         isVictory: false,
         aiRemaining: data.aiRemaining,
         humanRemaining: data.humanRemaining,
+        humanKilled: data.humanKilled,
+        reason: data.reason,
       })
     })
 
@@ -332,6 +348,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setGameResult,
     triggerElimination,
     playerFishId,
+    addFloatingDamage,
   ])
 
   // 发送事件

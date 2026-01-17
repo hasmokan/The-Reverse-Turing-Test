@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { GameItem, Comment, WSEventType } from '@/types'
 import { useBattleSystem } from '@/hooks/useBattleSystem'
+import { useDebounceCallback } from '@/hooks/useDebounce'
 import { ELIMINATION_THRESHOLD } from '@/lib/battleConstants'
 
 interface ItemDetailModalProps {
@@ -108,6 +109,11 @@ export function ItemDetailModal({
     setCommentText('')
   }
 
+  // 防抖处理的回调函数
+  const debouncedClose = useDebounceCallback(onClose, 300)
+  const debouncedBattleAction = useDebounceCallback(handleBattleAction, 300)
+  const debouncedSubmitComment = useDebounceCallback(handleSubmitComment, 300)
+
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp)
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
@@ -144,7 +150,7 @@ export function ItemDetailModal({
 
             {/* 关闭按钮 */}
             <motion.button
-              onClick={onClose}
+              onClick={debouncedClose}
               whileHover={{ scale: 1.15, rotate: 90 }}
               whileTap={{ scale: 0.9 }}
               className="absolute top-4 right-4 w-10 h-10 bg-gradient-to-br from-red-400 to-pink-400 rounded-full flex items-center justify-center text-white font-bold shadow-lg z-30 hand-drawn-button border-red-500"
@@ -279,7 +285,7 @@ export function ItemDetailModal({
                 <motion.button
                   whileHover={!isDisabled ? { scale: 1.05, rotate: -2 } : {}}
                   whileTap={!isDisabled ? { scale: 0.95, rotate: 2 } : {}}
-                  onClick={handleBattleAction}
+                  onClick={debouncedBattleAction}
                   disabled={isDisabled}
                   className={`w-full py-4 ${getButtonStyles()} text-white rounded-3xl font-bold text-lg shadow-2xl hand-drawn-button relative overflow-hidden transition-all duration-300`}
                 >
@@ -378,7 +384,7 @@ export function ItemDetailModal({
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={handleSubmitComment}
+                    onClick={debouncedSubmitComment}
                     disabled={!commentText.trim() || !authorName.trim()}
                     className="px-4 py-2 bg-gradient-to-r from-green-400 to-teal-400 text-white rounded-xl font-bold shadow-md hand-drawn-button border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

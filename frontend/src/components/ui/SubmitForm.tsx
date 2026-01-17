@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { useImageReview } from '@/hooks/useImageReview'
+import { useDebounceCallback } from '@/hooks/useDebounce'
 import { hasMinimaxApiKey } from '@/lib/minimax'
 
 interface SubmitFormProps {
@@ -50,6 +51,11 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
   const handleRetry = () => {
     reset()
   }
+
+  // 防抖处理的回调函数
+  const debouncedCancel = useDebounceCallback(onCancel, 300)
+  const debouncedRetry = useDebounceCallback(handleRetry, 300)
+  const debouncedForceSubmit = useDebounceCallback(handleForceSubmit, 300)
 
   // 渲染审核状态覆盖层
   const renderOverlay = () => {
@@ -174,7 +180,7 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
             className="flex gap-3 mt-6 w-full"
           >
             <motion.button
-              onClick={handleRetry}
+              onClick={debouncedRetry}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="flex-1 py-3 bg-gradient-to-r from-blue-400 to-purple-400 text-white rounded-xl font-bold hand-drawn-button border-purple-500"
@@ -182,7 +188,7 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
               🎨 重新画
             </motion.button>
             <motion.button
-              onClick={handleForceSubmit}
+              onClick={debouncedForceSubmit}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="flex-1 py-3 bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700 rounded-xl font-bold hand-drawn-button border-gray-500"
@@ -374,7 +380,7 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
             >
               <motion.button
                 type="button"
-                onClick={onCancel}
+                onClick={debouncedCancel}
                 whileHover={{ scale: 1.05, rotate: -2 }}
                 whileTap={{ scale: 0.95 }}
                 disabled={status === 'reviewing'}
