@@ -210,7 +210,7 @@ export default function HomePage() {
                     🔒
                   </motion.div>
                   <p className="text-white/90 text-lg font-bold text-center px-4 font-sketch">
-                    前面的区域以后再来探索吧
+                    观猹的瓜园～
                   </p>
                   <p className="text-white/60 text-sm mt-2">
                     敬请期待...
