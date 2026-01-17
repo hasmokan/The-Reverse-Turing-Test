@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { GameItem, Comment } from '@/types'
@@ -9,9 +9,16 @@ import GameStage from '@/components/stage/GameStage'
 import GameHeader from '@/components/ui/GameHeader'
 import SubmitForm from '@/components/ui/SubmitForm'
 import { ItemDetailModal, VotingTimer } from '@/components/voting/ItemDetailModal'
+import {
+  createDrawing,
+  voteDrawing,
+  getOrCreateSessionId,
+} from '@/lib/api'
+import useWebSocket from '@/hooks/useWebSocket'
 
 export default function GamePage() {
   const phase = useGameStore((state) => state.phase)
+  const roomId = useGameStore((state) => state.roomId)
   const setPhase = useGameStore((state) => state.setPhase)
   const addItem = useGameStore((state) => state.addItem)
   const castVote = useGameStore((state) => state.castVote)
@@ -24,23 +31,55 @@ export default function GamePage() {
   const [pendingImage, setPendingImage] = useState<string | null>(null)
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null)
   const [showItemModal, setShowItemModal] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [sessionId, setSessionId] = useState<string>('')
+
+  // 初始化 session ID
+  useEffect(() => {
+    setSessionId(getOrCreateSessionId())
+  }, [])
+
+  // 连接 WebSocket
+  const { submitComment } = useWebSocket({
+    roomId: roomId || '',
+    enabled: !!roomId,
+  })
 
   // 处理提交作品
-  const handleSubmit = (name: string, description: string) => {
-    if (!pendingImage) return
+  const handleSubmit = async (name: string, description: string) => {
+    if (!pendingImage || !roomId) return
 
-    addItem({
-      imageUrl: pendingImage,
-      name,
-      description,
-      author: '匿名艺术家',
-      isAI: false,
-      createdAt: Date.now(),
-    })
+    try {
+      setSubmitting(true)
 
-    setPendingImage(null)
-    setShowDrawing(false)
-    setPhase('viewing')
+      // 调用后端 API 提交绘画
+      const drawing = await createDrawing(roomId, {
+        image_data: pendingImage,
+        name,
+        description,
+        session_id: sessionId,
+        author_name: '匿名艺术家',
+      })
+
+      // 添加到本地 store
+      addItem({
+        imageUrl: drawing.imageUrl,
+        name: drawing.name,
+        description: drawing.description || '',
+        author: drawing.author,
+        isAI: false,
+        createdAt: new Date(drawing.createdAt).getTime(),
+      })
+
+      setPendingImage(null)
+      setShowDrawing(false)
+      setPhase('viewing')
+    } catch (err) {
+      console.error('Failed to submit drawing:', err)
+      alert('提交失败，请重试')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // 处理点击物体
@@ -50,14 +89,32 @@ export default function GamePage() {
   }
 
   // 处理投票
-  const handleVote = (itemId: string) => {
-    castVote(itemId)
+  const handleVote = async (itemId: string) => {
+    try {
+      // 调用后端 API 投票
+      const result = await voteDrawing(itemId, sessionId)
+
+      // 更新本地状态
+      castVote(itemId)
+
+      // 如果被淘汰，显示提示
+      if (result.eliminated) {
+        alert('投票成功！该作品已被淘汰')
+      }
+    } catch (err) {
+      console.error('Failed to vote:', err)
+      // 可能是已经投过票
+      alert('投票失败，可能你已经投过票了')
+    }
     setShowItemModal(false)
   }
 
   // 处理评论
   const handleComment = (itemId: string, comment: Omit<Comment, 'id' | 'createdAt'>) => {
+    // 本地添加评论
     addComment(itemId, comment)
+    // 通过 WebSocket 广播
+    submitComment(itemId, comment)
   }
 
   // 完成绘画 - 从画布导出真实图片
@@ -68,10 +125,34 @@ export default function GamePage() {
     }
   }
 
+  // 复制房间码
+  const copyRoomCode = () => {
+    if (roomId) {
+      navigator.clipboard.writeText(roomId)
+      alert(`房间码已复制: ${roomId}`)
+    }
+  }
+
   return (
     <main className="h-screen flex flex-col p-4 safe-area-inset bg-gradient-to-br from-yellow-50 via-pink-50 to-blue-100 crayon-texture">
       {/* 投票倒计时 */}
       <VotingTimer />
+
+      {/* 房间码显示 */}
+      {roomId && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-4 right-4 z-10"
+        >
+          <button
+            onClick={copyRoomCode}
+            className="px-3 py-1 bg-white/80 rounded-full text-sm font-mono shadow-md hover:bg-white transition-colors"
+          >
+            🔗 {roomId}
+          </button>
+        </motion.div>
+      )}
 
       {/* 顶部状态栏 */}
       <GameHeader />
@@ -222,6 +303,7 @@ export default function GamePage() {
             imageUrl={pendingImage}
             onSubmit={handleSubmit}
             onCancel={() => setPendingImage(null)}
+            disabled={submitting}
           />
         )}
       </AnimatePresence>

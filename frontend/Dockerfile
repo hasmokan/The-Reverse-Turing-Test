@@ -1,22 +1,31 @@
 # 第一阶段：依赖安装
 FROM node:20-alpine AS deps
+
+# 配置 Alpine 国内镜像
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add --no-cache libc6-compat
+
 WORKDIR /app
 
-# 复制包管理文件
-COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
+# 启用 pnpm
+RUN corepack enable pnpm
 
-# 安装依赖
-RUN \
-  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+# 使用官方 npm registry
+RUN pnpm config set registry https://registry.npmjs.org
+
+# 复制包管理文件
+COPY package.json pnpm-lock.yaml ./
+
+# 安装依赖（使用 BuildKit 缓存 pnpm store）
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+  pnpm i --frozen-lockfile
 
 # 第二阶段：构建
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+# 启用 pnpm
+RUN corepack enable pnpm
 
 # 复制依赖
 COPY --from=deps /app/node_modules ./node_modules
@@ -27,18 +36,20 @@ ARG NEXT_PUBLIC_VISION_API_URL
 ARG NEXT_PUBLIC_VISION_API_KEY
 ARG NEXT_PUBLIC_VISION_MODEL
 ARG NEXT_PUBLIC_WS_URL
+ARG NEXT_PUBLIC_API_URL
 
 # 设置环境变量用于构建
 ENV NEXT_PUBLIC_VISION_API_URL=${NEXT_PUBLIC_VISION_API_URL}
 ENV NEXT_PUBLIC_VISION_API_KEY=${NEXT_PUBLIC_VISION_API_KEY}
 ENV NEXT_PUBLIC_VISION_MODEL=${NEXT_PUBLIC_VISION_MODEL}
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # 禁用 Next.js 遥测
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # 构建应用
-RUN npm run build
+RUN pnpm run build
 
 # 第三阶段：生产运行
 FROM node:20-alpine AS runner
@@ -53,7 +64,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # 复制构建产物
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # 设置正确的权限
 RUN mkdir .next

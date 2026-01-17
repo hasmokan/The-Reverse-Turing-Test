@@ -1,23 +1,46 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { themes } from '@/config/themes'
 import { useGameStore } from '@/lib/store'
+import { createRoom, getOrCreateRoom, convertThemeResponse } from '@/lib/api'
 
 export default function HomePage() {
   const router = useRouter()
   const setTheme = useGameStore((state) => state.setTheme)
   const setRoomId = useGameStore((state) => state.setRoomId)
   const setPhase = useGameStore((state) => state.setPhase)
+  const syncState = useGameStore((state) => state.syncState)
 
-  const handleSelectRoom = (themeId: string) => {
-    const theme = themes[themeId]
-    if (theme) {
-      setTheme(theme)
-      setRoomId(themeId)
+  const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSelectRoom = async (themeId: string) => {
+    try {
+      setLoading(themeId)
+      setError(null)
+
+      // 调用 API 获取或创建房间（先查询活跃房间，没有则创建）
+      const { roomCode, theme } = await getOrCreateRoom(themeId)
+
+      // 设置游戏状态
+      setTheme(convertThemeResponse(theme))
+      setRoomId(roomCode)
       setPhase('viewing')
+      // 新房间或刚加入时使用默认初始值，后续通过 WebSocket 同步
+      syncState({
+        totalItems: 0,
+        aiCount: 0,
+        turbidity: 0,
+      })
+
       router.push('/game')
+    } catch (err) {
+      console.error('Failed to join/create room:', err)
+      setError('加入房间失败，请重试')
+      setLoading(null)
     }
   }
 
@@ -112,6 +135,23 @@ export default function HomePage() {
           🚀 选择主题房间
         </motion.h2>
 
+        {/* 错误提示 */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 bg-red-100 text-red-700 rounded-lg text-center"
+          >
+            {error}
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-red-500 hover:text-red-700"
+            >
+              ✕
+            </button>
+          </motion.div>
+        )}
+
         {Object.values(themes).map((theme, index) => (
           <motion.button
             key={theme.theme_id}
@@ -119,17 +159,31 @@ export default function HomePage() {
             animate={{ x: 0, opacity: 1, rotate: 0 }}
             transition={{ delay: 0.4 + index * 0.15, type: 'spring', stiffness: 100 }}
             whileHover={{
-              scale: 1.05,
+              scale: loading ? 1 : 1.05,
               rotate: index % 2 === 0 ? 2 : -2,
               transition: { duration: 0.3 }
             }}
             whileTap={{ scale: 0.95, rotate: 0 }}
             onClick={() => handleSelectRoom(theme.theme_id)}
-            className="w-full scribble-card overflow-hidden group relative"
+            disabled={loading !== null}
+            className="w-full scribble-card overflow-hidden group relative disabled:opacity-70"
             style={{
               borderColor: theme.palette[0] || '#FF6B9D'
             }}
           >
+            {/* 加载遮罩 */}
+            {loading === theme.theme_id && (
+              <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  className="text-4xl"
+                >
+                  🎨
+                </motion.div>
+              </div>
+            )}
+
             {/* 预览图 */}
             <div
               className="h-40 bg-cover bg-center relative overflow-hidden"

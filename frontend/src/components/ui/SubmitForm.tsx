@@ -10,9 +10,10 @@ interface SubmitFormProps {
   imageUrl: string
   onSubmit: (name: string, description: string) => void
   onCancel: () => void
+  disabled?: boolean
 }
 
-export function SubmitForm({ imageUrl, onSubmit, onCancel }: SubmitFormProps) {
+export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: SubmitFormProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const theme = useGameStore((state) => state.theme)
