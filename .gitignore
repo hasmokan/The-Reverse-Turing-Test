@@ -26,6 +26,7 @@ debug
 .env
 .env.local
 .env*.local
+.env.modelscope
 **/.env
 
 # Node.js (frontend)

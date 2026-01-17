@@ -55,6 +55,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install n8n globally
+RUN npm install -g n8n
+
 # Create app directory
 WORKDIR /app
 
@@ -68,6 +71,9 @@ COPY --from=frontend-builder /app/frontend/public /app/frontend/public
 
 # Copy database schema
 COPY backend/schema.sql /app/backend/schema.sql
+
+# Copy n8n workflow
+COPY n8n-workflow.json /app/n8n-workflow.json
 
 # Copy configuration files
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

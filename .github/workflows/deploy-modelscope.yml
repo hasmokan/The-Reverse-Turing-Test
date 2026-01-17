@@ -1,0 +1,51 @@
+# 魔搭创空间自动部署
+# 当推送到 main 分支时自动部署到 ModelScope
+#
+# 配置步骤：
+#   1. 在 GitHub 仓库 Settings -> Secrets and variables -> Actions
+#   2. 添加 Repository secret: MODELSCOPE_TOKEN
+#   3. 值为你的魔搭 Access Token（从 https://modelscope.cn/my/myaccesstoken 获取）
+
+name: Deploy to ModelScope
+
+on:
+  push:
+    branches:
+      - main
+  # 也支持手动触发
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史，用于推送
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Deploy to ModelScope
+        env:
+          MODELSCOPE_TOKEN: ${{ secrets.MODELSCOPE_TOKEN }}
+        run: |
+          if [ -z "$MODELSCOPE_TOKEN" ]; then
+            echo "Error: MODELSCOPE_TOKEN secret not configured"
+            echo "Please add MODELSCOPE_TOKEN in repository Settings -> Secrets -> Actions"
+            exit 1
+          fi
+
+          # 添加 ModelScope remote
+          git remote add modelscope "http://oauth2:${MODELSCOPE_TOKEN}@www.modelscope.cn/studios/hasmokan/The-Reverse-Turing-Test.git"
+
+          # 推送到魔搭（main -> master）
+          git push modelscope main:master
+
+          echo ""
+          echo "✅ Deploy complete!"
+          echo "🔗 View your app at: https://modelscope.cn/studios/hasmokan/The-Reverse-Turing-Test"
