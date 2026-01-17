@@ -4,7 +4,15 @@ import { useEffect, useRef, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useGameStore } from '@/lib/store'
 import { GameItem, WSEventType, Comment, ThemeConfig } from '@/types'
+import {
+  VoteUpdateData,
+  VoteReceivedData,
+  FishEliminateData,
+  GameVictoryData,
+  GameDefeatData,
+} from '@/types/battle'
 import { convertThemeResponse, ThemeResponse } from '@/lib/api'
+import { generateKillToast, generateSelfCaughtToast } from '@/lib/toastMessages'
 
 interface UseWebSocketOptions {
   url?: string
@@ -115,6 +123,14 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setTheme,
     setRoomId,
     setPhase,
+    // 战斗系统 actions
+    updateFishVotes,
+    clearFishVotes,
+    setBeingAttacked,
+    showToast,
+    setGameResult,
+    triggerElimination,
+    playerFishId,
   } = useGameStore()
 
   // 连接 WebSocket
@@ -206,6 +222,69 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
       addComment(data.itemId, data.comment)
     })
 
+    // ==================== 战斗系统事件 ====================
+
+    // 票数更新
+    socket.on('vote:update', (data: VoteUpdateData) => {
+      console.log('[WS] Vote update:', data)
+      updateFishVotes(data.fishId, data.count, data.voters)
+    })
+
+    // 被投票通知（自己的鱼被投票）
+    socket.on('vote:received', (data: VoteReceivedData) => {
+      console.log('[WS] Vote received:', data)
+      // 检查是否是自己的鱼
+      if (data.fishId === playerFishId) {
+        setBeingAttacked(true)
+        showToast('being_attacked', '⚠️ 有人在瞄准你！')
+      }
+    })
+
+    // 鱼被淘汰
+    socket.on('fish:eliminate', (data: FishEliminateData) => {
+      console.log('[WS] Fish eliminated:', data)
+
+      // 触发处决动画
+      triggerElimination(data.fishId, data.fishName, data.isAI)
+
+      // 如果是自己的鱼被淘汰
+      if (data.fishOwnerId === playerFishId) {
+        showToast('self_caught', generateSelfCaughtToast(data.fishName))
+      } else {
+        // 显示击杀 Toast
+        const toastContent = generateKillToast(data.fishName, data.isAI)
+        showToast(data.isAI ? 'kill_ai' : 'kill_human', toastContent)
+      }
+
+      // 清除票数记录
+      clearFishVotes(data.fishId)
+
+      // 移除鱼（由 GrabEffect 组件处理，这里延迟执行）
+      // removeItem(data.fishId) - 由 GrabEffect 处理
+    })
+
+    // 游戏胜利
+    socket.on('game:victory', (data: GameVictoryData) => {
+      console.log('[WS] Game victory:', data)
+      setGameResult({
+        isVictory: true,
+        mvpPlayerId: data.mvpId,
+        mvpPlayerName: data.mvpName,
+        aiRemaining: data.aiRemaining,
+        humanRemaining: data.humanRemaining,
+      })
+    })
+
+    // 游戏失败
+    socket.on('game:defeat', (data: GameDefeatData) => {
+      console.log('[WS] Game defeat:', data)
+      setGameResult({
+        isVictory: false,
+        aiRemaining: data.aiRemaining,
+        humanRemaining: data.humanRemaining,
+      })
+    })
+
     // 断开连接
     socket.on('disconnect', () => {
       console.log('[WS] Disconnected from server')
@@ -236,6 +315,14 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setTheme,
     setRoomId,
     setPhase,
+    // 战斗系统
+    updateFishVotes,
+    clearFishVotes,
+    setBeingAttacked,
+    showToast,
+    setGameResult,
+    triggerElimination,
+    playerFishId,
   ])
 
   // 发送事件
@@ -274,12 +361,42 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     [emit]
   )
 
+  // ==================== 战斗系统方法 ====================
+
+  // 投票
+  const battleVote = useCallback(
+    (fishId: string, voterId: string) => {
+      emit('vote:cast', { fishId, voterId })
+    },
+    [emit]
+  )
+
+  // 撤票
+  const retractVote = useCallback(
+    (fishId: string, voterId: string) => {
+      emit('vote:retract', { fishId, voterId })
+    },
+    [emit]
+  )
+
+  // 追击
+  const chaseVote = useCallback(
+    (fishId: string, voterId: string) => {
+      emit('vote:chase', { fishId, voterId })
+    },
+    [emit]
+  )
+
   return {
     socket: socketRef.current,
     emit,
     submitItem,
     initiateVote,
     submitComment,
+    // 战斗系统
+    battleVote,
+    retractVote,
+    chaseVote,
     isConnected: socketRef.current?.connected ?? false,
   }
 }

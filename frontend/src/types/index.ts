@@ -93,6 +93,16 @@ export type WSEventType =
   | 'vote:cast'
   | 'vote:start'
   | 'vote:end'
+  | 'vote:retract'
+  | 'vote:chase'
+  | 'vote:update'
+  | 'vote:received'
+  | 'fish:eliminate'
   | 'game:over'
+  | 'game:victory'
+  | 'game:defeat'
   | 'sync:state'
   | 'comment:add'
+
+// 导出战斗系统类型
+export * from './battle'

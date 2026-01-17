@@ -1,10 +1,32 @@
 import { create } from 'zustand'
 import { GameState, GameItem, GamePhase, ThemeConfig, Comment } from '@/types'
+import {
+  BulletState,
+  FishVotes,
+  ToastMessage,
+  ToastType,
+  GameResult,
+  EliminationAnimation,
+  FloatingDamage,
+} from '@/types/battle'
 import { fishTankTheme } from '@/config/themes'
 import { generateId, randomRange, calculateTurbidity } from '@/lib/utils'
+import { COOLDOWN_DURATION, MAX_TOAST_COUNT, ELIMINATION_THRESHOLD } from '@/lib/battleConstants'
 
 interface GameStore extends GameState {
-  // Actions
+  // 战斗系统状态
+  bullet: BulletState
+  fishVotes: FishVotes
+  playerId: string | null
+  playerFishId: string | null
+  toasts: ToastMessage[]
+  isBeingAttacked: boolean
+  attackWarningEndTime: number | null
+  gameResult: GameResult | null
+  eliminationAnimation: EliminationAnimation | null
+  floatingDamages: FloatingDamage[]
+
+  // 原有 Actions
   setPhase: (phase: GamePhase) => void
   setRoomId: (roomId: string) => void
   setTheme: (theme: ThemeConfig) => void
@@ -19,6 +41,40 @@ interface GameStore extends GameState {
   setGameOver: () => void
   resetGame: () => void
   syncState: (state: Partial<GameState>) => void
+
+  // 战斗系统 Actions
+  setPlayerId: (playerId: string) => void
+  setPlayerFishId: (fishId: string) => void
+
+  // 子弹相关
+  fireBullet: (targetId: string) => void
+  reloadBullet: () => void
+  startCooldown: () => void
+  changeTarget: (newTargetId: string) => void
+  chaseFire: (targetId: string) => void
+
+  // 票数相关
+  updateFishVotes: (fishId: string, count: number, voters: string[]) => void
+  clearFishVotes: (fishId: string) => void
+
+  // Toast 相关
+  showToast: (type: ToastType, content: string) => void
+  removeToast: (id: string) => void
+
+  // 攻击警告
+  setBeingAttacked: (isAttacked: boolean, duration?: number) => void
+
+  // 游戏结果
+  setGameResult: (result: GameResult) => void
+  clearGameResult: () => void
+
+  // 处决动画
+  triggerElimination: (fishId: string, fishName: string, isAI: boolean) => void
+  clearEliminationAnimation: () => void
+
+  // 漂浮伤害
+  addFloatingDamage: (fishId: string, x: number, y: number, value?: number) => void
+  removeFloatingDamage: (id: string) => void
 }
 
 const initialState: GameState = {
@@ -34,8 +90,27 @@ const initialState: GameState = {
   turbidity: 0,
 }
 
+// 战斗系统初始状态
+const initialBattleState = {
+  bullet: {
+    loaded: true,
+    cooldownEndTime: null,
+    currentTarget: null,
+  } as BulletState,
+  fishVotes: {} as FishVotes,
+  playerId: null as string | null,
+  playerFishId: null as string | null,
+  toasts: [] as ToastMessage[],
+  isBeingAttacked: false,
+  attackWarningEndTime: null as number | null,
+  gameResult: null as GameResult | null,
+  eliminationAnimation: null as EliminationAnimation | null,
+  floatingDamages: [] as FloatingDamage[],
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   ...initialState,
+  ...initialBattleState,
 
   setPhase: (phase) => set({ phase }),
 
@@ -167,10 +242,212 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetGame: () => {
-    set(initialState)
+    set({ ...initialState, ...initialBattleState })
   },
 
   syncState: (newState) => {
     set((state) => ({ ...state, ...newState }))
+  },
+
+  // ==================== 战斗系统 Actions ====================
+
+  setPlayerId: (playerId) => set({ playerId }),
+
+  setPlayerFishId: (fishId) => set({ playerFishId: fishId }),
+
+  // 开火 - 消耗子弹，开始 CD
+  fireBullet: (targetId) => {
+    const { bullet } = get()
+    if (!bullet.loaded) return
+
+    set({
+      bullet: {
+        loaded: false,
+        cooldownEndTime: Date.now() + COOLDOWN_DURATION,
+        currentTarget: targetId,
+      },
+    })
+  },
+
+  // 装弹 - CD 结束时调用
+  reloadBullet: () => {
+    set({
+      bullet: {
+        loaded: true,
+        cooldownEndTime: null,
+        currentTarget: get().bullet.currentTarget, // 保持当前目标
+      },
+    })
+  },
+
+  // 开始 CD
+  startCooldown: () => {
+    set((state) => ({
+      bullet: {
+        ...state.bullet,
+        loaded: false,
+        cooldownEndTime: Date.now() + COOLDOWN_DURATION,
+      },
+    }))
+  },
+
+  // 换目标 - 撤回当前目标的票，投给新目标
+  changeTarget: (newTargetId) => {
+    const { bullet, fishVotes, playerId } = get()
+    const oldTargetId = bullet.currentTarget
+
+    // 更新本地 fishVotes（撤票）
+    if (oldTargetId && fishVotes[oldTargetId]) {
+      const oldVotes = fishVotes[oldTargetId]
+      set((state) => ({
+        fishVotes: {
+          ...state.fishVotes,
+          [oldTargetId]: {
+            count: Math.max(0, oldVotes.count - 1),
+            voters: oldVotes.voters.filter((v) => v !== playerId),
+          },
+        },
+        bullet: {
+          ...state.bullet,
+          currentTarget: newTargetId,
+        },
+      }))
+    } else {
+      set((state) => ({
+        bullet: {
+          ...state.bullet,
+          currentTarget: newTargetId,
+        },
+      }))
+    }
+  },
+
+  // 追击 - 重置 CD，但票数不变
+  chaseFire: (targetId) => {
+    set({
+      bullet: {
+        loaded: false,
+        cooldownEndTime: Date.now() + COOLDOWN_DURATION,
+        currentTarget: targetId,
+      },
+    })
+  },
+
+  // 更新鱼的票数
+  updateFishVotes: (fishId, count, voters) => {
+    set((state) => ({
+      fishVotes: {
+        ...state.fishVotes,
+        [fishId]: { count, voters },
+      },
+    }))
+
+    // 检查是否达到处决阈值
+    if (count >= ELIMINATION_THRESHOLD) {
+      const item = get().items.find((i) => i.id === fishId)
+      if (item) {
+        get().triggerElimination(fishId, item.name, item.isAI)
+      }
+    }
+  },
+
+  // 清除鱼的票数
+  clearFishVotes: (fishId) => {
+    set((state) => {
+      const newFishVotes = { ...state.fishVotes }
+      delete newFishVotes[fishId]
+      return { fishVotes: newFishVotes }
+    })
+  },
+
+  // 显示 Toast
+  showToast: (type, content) => {
+    const newToast: ToastMessage = {
+      id: generateId(),
+      type,
+      content,
+      createdAt: Date.now(),
+    }
+
+    set((state) => {
+      // 限制最大数量，移除最旧的
+      const newToasts = [newToast, ...state.toasts].slice(0, MAX_TOAST_COUNT)
+      return { toasts: newToasts }
+    })
+  },
+
+  // 移除 Toast
+  removeToast: (id) => {
+    set((state) => ({
+      toasts: state.toasts.filter((t) => t.id !== id),
+    }))
+  },
+
+  // 设置被攻击状态
+  setBeingAttacked: (isAttacked, duration = 5000) => {
+    if (isAttacked) {
+      set({
+        isBeingAttacked: true,
+        attackWarningEndTime: Date.now() + duration,
+      })
+    } else {
+      set({
+        isBeingAttacked: false,
+        attackWarningEndTime: null,
+      })
+    }
+  },
+
+  // 设置游戏结果
+  setGameResult: (result) => {
+    set({
+      gameResult: result,
+      phase: 'gameover',
+    })
+  },
+
+  // 清除游戏结果
+  clearGameResult: () => {
+    set({ gameResult: null })
+  },
+
+  // 触发处决动画
+  triggerElimination: (fishId, fishName, isAI) => {
+    set({
+      eliminationAnimation: {
+        fishId,
+        fishName,
+        isAI,
+        stage: 'grab',
+      },
+    })
+  },
+
+  // 清除处决动画
+  clearEliminationAnimation: () => {
+    set({ eliminationAnimation: null })
+  },
+
+  // 添加漂浮伤害数字
+  addFloatingDamage: (fishId, x, y, value = 1) => {
+    const newDamage: FloatingDamage = {
+      id: generateId(),
+      fishId,
+      value,
+      x,
+      y,
+      createdAt: Date.now(),
+    }
+
+    set((state) => ({
+      floatingDamages: [...state.floatingDamages, newDamage],
+    }))
+  },
+
+  // 移除漂浮伤害数字
+  removeFloatingDamage: (id) => {
+    set((state) => ({
+      floatingDamages: state.floatingDamages.filter((d) => d.id !== id),
+    }))
   },
 }))

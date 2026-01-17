@@ -15,6 +15,13 @@ import {
   getOrCreateSessionId,
 } from '@/lib/api'
 import useWebSocket from '@/hooks/useWebSocket'
+import { useBattleSystem } from '@/hooks/useBattleSystem'
+
+// 战斗系统组件
+import { ToastContainer, AttackWarning } from '@/components/feedback'
+import { CooldownHUD } from '@/components/hud'
+import { FloatingDamageLayer, GrabEffect } from '@/components/effects'
+import { VictoryScreen, DefeatScreen } from '@/components/result'
 
 export default function GamePage() {
   const phase = useGameStore((state) => state.phase)
@@ -25,6 +32,8 @@ export default function GamePage() {
   const startVoting = useGameStore((state) => state.startVoting)
   const resetGame = useGameStore((state) => state.resetGame)
   const addComment = useGameStore((state) => state.addComment)
+  const gameResult = useGameStore((state) => state.gameResult)
+  const setPlayerId = useGameStore((state) => state.setPlayerId)
 
   const canvasRef = useRef<DrawingCanvasRef>(null)
   const [showDrawing, setShowDrawing] = useState(false)
@@ -36,14 +45,19 @@ export default function GamePage() {
 
   // 初始化 session ID
   useEffect(() => {
-    setSessionId(getOrCreateSessionId())
-  }, [])
+    const id = getOrCreateSessionId()
+    setSessionId(id)
+    setPlayerId(id) // 设置玩家 ID
+  }, [setPlayerId])
 
   // 连接 WebSocket
-  const { submitComment } = useWebSocket({
+  const { submitComment, emit, battleVote, retractVote, chaseVote } = useWebSocket({
     roomId: roomId || '',
     enabled: !!roomId,
   })
+
+  // 战斗系统
+  const battleSystem = useBattleSystem({ emit })
 
   // 处理提交作品
   const handleSubmit = async (name: string, description: string) => {
@@ -109,6 +123,16 @@ export default function GamePage() {
     setShowItemModal(false)
   }
 
+  // 处理战斗操作
+  const handleBattleAction = (fishId: string, position?: { x: number; y: number }) => {
+    const result = battleSystem.executeAction(fishId, position)
+    if (result) {
+      // 关闭弹窗
+      setShowItemModal(false)
+    }
+    return result
+  }
+
   // 处理评论
   const handleComment = (itemId: string, comment: Omit<Comment, 'id' | 'createdAt'>) => {
     // 本地添加评论
@@ -133,8 +157,36 @@ export default function GamePage() {
     }
   }
 
+  // 判断是否显示游戏结束界面（由 VictoryScreen/DefeatScreen 处理）
+  const showGameOverOverlay = gameResult !== null
+
   return (
     <main className="h-screen flex flex-col p-4 safe-area-inset bg-gradient-to-br from-yellow-50 via-pink-50 to-blue-100 crayon-texture">
+      {/* ==================== 战斗系统全局组件 ==================== */}
+
+      {/* Toast 通知容器 */}
+      <ToastContainer />
+
+      {/* 攻击警告（屏幕边缘泛红） */}
+      <AttackWarning />
+
+      {/* 漂浮伤害数字 */}
+      <FloatingDamageLayer />
+
+      {/* 处决动画（机械手） */}
+      <GrabEffect />
+
+      {/* 胜利界面 */}
+      <VictoryScreen />
+
+      {/* 失败界面 */}
+      <DefeatScreen />
+
+      {/* CD 倒计时 HUD */}
+      <CooldownHUD />
+
+      {/* ==================== 原有组件 ==================== */}
+
       {/* 投票倒计时 */}
       <VotingTimer />
 
@@ -205,7 +257,7 @@ export default function GamePage() {
       </div>
 
       {/* 底部操作区 */}
-      {!showDrawing && phase !== 'gameover' && (
+      {!showDrawing && phase !== 'gameover' && !showGameOverOverlay && (
         <motion.div
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -272,8 +324,8 @@ export default function GamePage() {
         </motion.div>
       )}
 
-      {/* Game Over 重置按钮 */}
-      {phase === 'gameover' && (
+      {/* Game Over 重置按钮（仅在没有 gameResult 时显示） */}
+      {phase === 'gameover' && !showGameOverOverlay && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -315,6 +367,8 @@ export default function GamePage() {
         onClose={() => setShowItemModal(false)}
         onVote={handleVote}
         onComment={handleComment}
+        onBattleAction={handleBattleAction}
+        wsEmit={emit}
       />
     </main>
   )

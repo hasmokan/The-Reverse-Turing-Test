@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
-import { GameItem, Comment } from '@/types'
+import { GameItem, Comment, WSEventType } from '@/types'
+import { useBattleSystem } from '@/hooks/useBattleSystem'
+import { ELIMINATION_THRESHOLD } from '@/lib/battleConstants'
 
 interface ItemDetailModalProps {
   item: GameItem | null
@@ -11,9 +13,20 @@ interface ItemDetailModalProps {
   onClose: () => void
   onVote: (itemId: string) => void
   onComment?: (itemId: string, comment: Omit<Comment, 'id' | 'createdAt'>) => void
+  // 战斗系统 props
+  onBattleAction?: (fishId: string, position?: { x: number; y: number }) => boolean
+  wsEmit?: (event: WSEventType, data?: unknown) => void
 }
 
-export function ItemDetailModal({ item, isOpen, onClose, onVote, onComment }: ItemDetailModalProps) {
+export function ItemDetailModal({
+  item,
+  isOpen,
+  onClose,
+  onVote,
+  onComment,
+  onBattleAction,
+  wsEmit,
+}: ItemDetailModalProps) {
   const phase = useGameStore((state) => state.phase)
   const votes = useGameStore((state) => state.votes)
   const votingTarget = useGameStore((state) => state.votingTarget)
@@ -22,6 +35,15 @@ export function ItemDetailModal({ item, isOpen, onClose, onVote, onComment }: It
   const [commentText, setCommentText] = useState('')
   const [authorName, setAuthorName] = useState('')
   const commentsEndRef = useRef<HTMLDivElement>(null)
+
+  // 战斗系统
+  const {
+    getVoteCount,
+    getActionType,
+    getActionText,
+    executeAction,
+    bullet,
+  } = useBattleSystem({ emit: wsEmit })
 
   // 从 store 获取最新的 item（包含评论）
   const currentItem = items.find((i) => i.id === item?.id) || item
@@ -35,10 +57,45 @@ export function ItemDetailModal({ item, isOpen, onClose, onVote, onComment }: It
 
   if (!currentItem) return null
 
-  const isVotingPhase = phase === 'voting'
+  const isVotingPhase = phase === 'voting' || phase === 'viewing' // 支持观看阶段也可以投票
   const isVotingTarget = votingTarget?.id === currentItem.id
   const currentVotes = votes[currentItem.id] || 0
   const comments = currentItem.comments || []
+
+  // 战斗系统：获取票数和操作类型
+  const fishVoteCount = getVoteCount(currentItem.id)
+  const actionType = getActionType(currentItem.id)
+  const actionText = getActionText(currentItem.id)
+  const isDisabled = actionType === 'disabled'
+
+  // 按钮样式根据操作类型
+  const getButtonStyles = () => {
+    switch (actionType) {
+      case 'vote':
+        return 'bg-gradient-to-r from-red-500 via-orange-500 to-pink-500 border-red-600'
+      case 'chase':
+        return 'bg-gradient-to-r from-purple-500 via-violet-500 to-indigo-500 border-purple-600'
+      case 'switch':
+        return 'bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 border-blue-600'
+      case 'disabled':
+      default:
+        return 'bg-gray-400 border-gray-500 cursor-not-allowed'
+    }
+  }
+
+  // 处理战斗操作
+  const handleBattleAction = () => {
+    if (isDisabled) return
+
+    // 获取鱼的位置用于漂浮数字
+    const position = currentItem.position
+
+    if (onBattleAction) {
+      onBattleAction(currentItem.id, position)
+    } else {
+      executeAction(currentItem.id, position)
+    }
+  }
 
   const handleSubmitComment = () => {
     if (!commentText.trim() || !authorName.trim()) return
@@ -134,6 +191,17 @@ export function ItemDetailModal({ item, isOpen, onClose, onVote, onComment }: It
                   className="w-36 h-36 object-contain mx-auto drop-shadow-2xl"
                 />
               </motion.div>
+
+              {/* 票数显示徽章 */}
+              {fishVoteCount > 0 && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute top-4 right-14 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-lg"
+                >
+                  🗳️ {fishVoteCount}/{ELIMINATION_THRESHOLD}
+                </motion.div>
+              )}
             </div>
 
             {/* 信息区 */}
@@ -166,43 +234,80 @@ export function ItemDetailModal({ item, isOpen, onClose, onVote, onComment }: It
                 创作者：<span className="font-bold text-purple-600">{currentItem.author}</span>
               </motion.div>
 
-              {/* 投票按钮区 */}
-              {isVotingPhase && (
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  {isVotingTarget && (
-                    <motion.div
-                      animate={{ scale: [1, 1.05, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className="text-center mb-3 p-2 bg-orange-100 border-2 border-orange-400 rounded-xl"
-                    >
-                      <span className="text-sm font-bold text-orange-700">
-                        当前票数：{currentVotes} 🗳️
-                      </span>
-                    </motion.div>
-                  )}
+              {/* 战斗按钮区 */}
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                {/* 票数进度条 */}
+                {fishVoteCount > 0 && (
+                  <div className="mb-3">
+                    <div className="flex justify-between text-xs text-gray-600 mb-1">
+                      <span>票数</span>
+                      <span>{fishVoteCount}/{ELIMINATION_THRESHOLD}</span>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-red-500 to-orange-500"
+                        initial={{ width: 0 }}
+                        animate={{
+                          width: `${(fishVoteCount / ELIMINATION_THRESHOLD) * 100}%`,
+                        }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    </div>
+                  </div>
+                )}
 
-                  <motion.button
-                    whileHover={{ scale: 1.05, rotate: -2 }}
-                    whileTap={{ scale: 0.95, rotate: 2 }}
-                    onClick={() => onVote(currentItem.id)}
-                    className="w-full py-4 bg-gradient-to-r from-red-500 via-orange-500 to-pink-500 text-white rounded-3xl font-bold text-lg shadow-2xl hand-drawn-button border-red-600 relative overflow-hidden"
-                  >
-                    <span className="relative z-10 flex items-center justify-center gap-2">
-                      🚨 它是假的！
-                    </span>
-                    {/* 脉冲效果 */}
+                {/* 子弹状态提示 */}
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <motion.div
+                    animate={{
+                      backgroundColor: bullet.loaded ? '#ef4444' : '#6b7280',
+                      scale: bullet.loaded ? [1, 1.1, 1] : 1,
+                    }}
+                    transition={{ duration: 0.3 }}
+                    className="w-3 h-3 rounded-full"
+                  />
+                  <span className={`text-xs ${bullet.loaded ? 'text-red-500' : 'text-gray-500'}`}>
+                    {bullet.loaded ? '弹药已装填' : '弹药冷却中...'}
+                  </span>
+                </div>
+
+                {/* 战斗按钮 */}
+                <motion.button
+                  whileHover={!isDisabled ? { scale: 1.05, rotate: -2 } : {}}
+                  whileTap={!isDisabled ? { scale: 0.95, rotate: 2 } : {}}
+                  onClick={handleBattleAction}
+                  disabled={isDisabled}
+                  className={`w-full py-4 ${getButtonStyles()} text-white rounded-3xl font-bold text-lg shadow-2xl hand-drawn-button relative overflow-hidden transition-all duration-300`}
+                >
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    {actionType === 'vote' && '🎯'}
+                    {actionType === 'chase' && '⚡'}
+                    {actionType === 'switch' && '🔄'}
+                    {actionType === 'disabled' && '⏳'}
+                    {actionText}
+                  </span>
+                  {/* 脉冲效果 */}
+                  {!isDisabled && (
                     <motion.div
                       className="absolute inset-0 bg-white"
                       animate={{ opacity: [0, 0.3, 0] }}
                       transition={{ duration: 1.5, repeat: Infinity }}
                     />
-                  </motion.button>
-                </motion.div>
-              )}
+                  )}
+                </motion.button>
+
+                {/* 操作提示 */}
+                <div className="mt-2 text-center text-xs text-gray-500">
+                  {actionType === 'vote' && '投票后进入 7.5 秒冷却'}
+                  {actionType === 'chase' && '追击会重置冷却时间'}
+                  {actionType === 'switch' && '换目标会自动撤销之前的投票'}
+                  {actionType === 'disabled' && '请等待冷却结束'}
+                </div>
+              </motion.div>
             </div>
 
             {/* 评论区 */}
