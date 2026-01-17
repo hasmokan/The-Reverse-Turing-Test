@@ -1,10 +1,18 @@
 'use client'
 
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ANIMATION_CONFIG } from '@/lib/battleConstants'
 
 interface CrackEffectProps {
   active: boolean
+}
+
+interface ShardParticle {
+  id: number
+  left: number
+  yTarget: number
+  rotate: number
 }
 
 // 裂纹 SVG 路径
@@ -15,6 +23,22 @@ const CrackPaths = [
 ]
 
 export function CrackEffect({ active }: CrackEffectProps) {
+  const [shards, setShards] = useState<ShardParticle[]>([])
+
+  // 当 active 变化时生成碎片数据（仅在客户端）
+  useEffect(() => {
+    if (active) {
+      const newShards = Array.from({ length: 10 }, (_, i) => ({
+        id: i,
+        left: 20 + Math.random() * 60,
+        yTarget: 300 + Math.random() * 200,
+        rotate: Math.random() * 360,
+      }))
+      setShards(newShards)
+    } else {
+      setShards([])
+    }
+  }, [active])
   return (
     <AnimatePresence>
       {active && (
@@ -54,24 +78,24 @@ export function CrackEffect({ active }: CrackEffectProps) {
           </svg>
 
           {/* 碎片效果 */}
-          {[...Array(10)].map((_, i) => (
+          {shards.map((shard) => (
             <motion.div
-              key={i}
+              key={shard.id}
               className="absolute w-4 h-4 bg-white/30"
               style={{
-                left: `${20 + Math.random() * 60}%`,
+                left: `${shard.left}%`,
                 top: '40%',
                 clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
               }}
               initial={{ y: 0, opacity: 1, rotate: 0 }}
               animate={{
-                y: 300 + Math.random() * 200,
+                y: shard.yTarget,
                 opacity: 0,
-                rotate: Math.random() * 360,
+                rotate: shard.rotate,
               }}
               transition={{
                 duration: 1.5,
-                delay: 0.3 + i * 0.05,
+                delay: 0.3 + shard.id * 0.05,
                 ease: 'easeIn',
               }}
             />

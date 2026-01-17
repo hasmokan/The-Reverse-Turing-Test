@@ -49,6 +49,39 @@ export function ItemDetailModal({
   // 从 store 获取最新的 item（包含评论）
   const currentItem = items.find((i) => i.id === item?.id) || item
 
+  // 处理战斗操作
+  const handleBattleAction = () => {
+    if (!currentItem) return
+    const actionType = getActionType(currentItem.id)
+    if (actionType === 'disabled') return
+
+    // 获取鱼的位置用于漂浮数字
+    const position = currentItem.position
+
+    if (onBattleAction) {
+      onBattleAction(currentItem.id, position)
+    } else {
+      executeAction(currentItem.id, position)
+    }
+  }
+
+  const handleSubmitComment = () => {
+    if (!currentItem) return
+    if (!commentText.trim() || !authorName.trim()) return
+
+    onComment?.(currentItem.id, {
+      author: authorName.trim(),
+      content: commentText.trim(),
+    })
+
+    setCommentText('')
+  }
+
+  // 防抖处理的回调函数 - 必须在条件返回之前调用
+  const debouncedClose = useDebounceCallback(onClose, 300)
+  const debouncedBattleAction = useDebounceCallback(handleBattleAction, 300)
+  const debouncedSubmitComment = useDebounceCallback(handleSubmitComment, 300)
+
   // 滚动到最新评论
   useEffect(() => {
     if (commentsEndRef.current) {
@@ -56,6 +89,7 @@ export function ItemDetailModal({
     }
   }, [currentItem?.comments?.length])
 
+  // 条件返回必须在所有 hooks 之后
   if (!currentItem) return null
 
   const isVotingPhase = phase === 'voting' || phase === 'viewing' // 支持观看阶段也可以投票
@@ -68,6 +102,11 @@ export function ItemDetailModal({
   const actionType = getActionType(currentItem.id)
   const actionText = getActionText(currentItem.id)
   const isDisabled = actionType === 'disabled'
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp)
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+  }
 
   // 按钮样式根据操作类型
   const getButtonStyles = () => {
@@ -82,41 +121,6 @@ export function ItemDetailModal({
       default:
         return 'bg-gray-400 border-gray-500 cursor-not-allowed'
     }
-  }
-
-  // 处理战斗操作
-  const handleBattleAction = () => {
-    if (isDisabled) return
-
-    // 获取鱼的位置用于漂浮数字
-    const position = currentItem.position
-
-    if (onBattleAction) {
-      onBattleAction(currentItem.id, position)
-    } else {
-      executeAction(currentItem.id, position)
-    }
-  }
-
-  const handleSubmitComment = () => {
-    if (!commentText.trim() || !authorName.trim()) return
-
-    onComment?.(currentItem.id, {
-      author: authorName.trim(),
-      content: commentText.trim(),
-    })
-
-    setCommentText('')
-  }
-
-  // 防抖处理的回调函数
-  const debouncedClose = useDebounceCallback(onClose, 300)
-  const debouncedBattleAction = useDebounceCallback(handleBattleAction, 300)
-  const debouncedSubmitComment = useDebounceCallback(handleSubmitComment, 300)
-
-  const formatTime = (timestamp: number) => {
-    const date = new Date(timestamp)
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
   return (

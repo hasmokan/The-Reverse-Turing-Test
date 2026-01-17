@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { FloatingDamage as FloatingDamageType } from '@/types/battle'
@@ -69,7 +69,8 @@ function ImpactWave({ x, y }: { x: number; y: number }) {
 
 // 弹壳粒子
 function BulletParticles({ x, y }: { x: number; y: number }) {
-  const particles = Array.from({ length: 8 }, (_, i) => {
+  // 预计算粒子数据，避免渲染时重复计算随机值
+  const particles = useMemo(() => Array.from({ length: 8 }, (_, i) => {
     const angle = (i / 8) * Math.PI * 2
     const distance = 60 + Math.random() * 40
     const targetX = Math.cos(angle) * distance
@@ -77,7 +78,7 @@ function BulletParticles({ x, y }: { x: number; y: number }) {
     const rotation = Math.random() * 720 - 360
 
     return { id: i, targetX, targetY, rotation, delay: Math.random() * 0.1 }
-  })
+  }), [])
 
   return (
     <>
@@ -117,12 +118,13 @@ function BulletParticles({ x, y }: { x: number; y: number }) {
 
 // 火花效果
 function Sparks({ x, y }: { x: number; y: number }) {
-  const sparks = Array.from({ length: 6 }, (_, i) => {
+  // 预计算火花数据，避免渲染时重复计算随机值
+  const sparks = useMemo(() => Array.from({ length: 6 }, (_, i) => {
     const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.5
     const length = 30 + Math.random() * 20
 
     return { id: i, angle, length }
-  })
+  }), [])
 
   return (
     <>
