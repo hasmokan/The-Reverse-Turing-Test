@@ -1,7 +1,7 @@
 # ============================================
 # Stage 1: Build Rust Backend
 # ============================================
-FROM rust:1.83-slim-bookworm AS backend-builder
+FROM rust:1.85-slim-bookworm AS backend-builder
 
 WORKDIR /app/backend
 
@@ -19,27 +19,7 @@ COPY backend/src ./src
 RUN cargo build --release
 
 # ============================================
-# Stage 2: Build Next.js Frontend
-# ============================================
-FROM node:20-slim AS frontend-builder
-
-WORKDIR /app/frontend
-
-# Copy package files
-COPY frontend/package*.json ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy frontend source
-COPY frontend/ ./
-
-# Build Next.js (standalone output)
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
-
-# ============================================
-# Stage 3: Production Runtime
+# Stage 2: Production Runtime
 # ============================================
 FROM debian:bookworm-slim AS runtime
 
@@ -48,8 +28,6 @@ RUN apt-get update && apt-get install -y \
     redis-server \
     nginx \
     supervisor \
-    nodejs \
-    npm \
     libssl3 \
     ca-certificates \
     curl \
@@ -60,11 +38,6 @@ WORKDIR /app
 
 # Copy Rust backend binary
 COPY --from=backend-builder /app/backend/target/release/mimic-backend /app/backend/mimic-backend
-
-# Copy Next.js standalone build
-COPY --from=frontend-builder /app/frontend/.next/standalone /app/frontend
-COPY --from=frontend-builder /app/frontend/.next/static /app/frontend/.next/static
-COPY --from=frontend-builder /app/frontend/public /app/frontend/public
 
 # Copy database schema
 COPY backend/schema.sql /app/backend/schema.sql
@@ -83,7 +56,6 @@ ENV DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mimic
 ENV REDIS_URL=redis://localhost:6379
 ENV HOST=0.0.0.0
 ENV PORT=3001
-ENV NODE_ENV=production
 
 # Basic container health check (served by nginx)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
