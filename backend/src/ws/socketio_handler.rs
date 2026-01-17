@@ -24,6 +24,8 @@ pub fn on_connect(socket: SocketRef, state: SioState<Arc<AppState>>) {
     socket.on("room:join", on_room_join);
     socket.on("room:leave", on_room_leave);
     socket.on("vote:cast", on_vote_cast);
+    socket.on("vote:retract", on_vote_retract);
+    socket.on("vote:chase", on_vote_chase);
     socket.on("comment:add", on_comment_add);
     socket.on_disconnect(on_disconnect);
 }
@@ -82,23 +84,159 @@ fn on_disconnect(socket: SocketRef, state: SioState<Arc<AppState>>) {
     }
 }
 
-/// 投票
+/// 投票/开火 (战斗系统)
 async fn on_vote_cast(
     socket: SocketRef,
-    Data(data): Data<VoteCastData>,
+    Data(data): Data<BattleVoteCastData>,
     state: SioState<Arc<AppState>>,
 ) {
-    debug!("[Socket.IO] Vote cast for item {}", data.item_id);
+    info!("[Socket.IO] Vote cast: {:?}", data);
 
-    // 从数据库获取 drawing
-    let drawing_id = match uuid::Uuid::parse_str(&data.item_id) {
+    let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
         Ok(id) => id,
         Err(_) => return,
     };
 
-    if let Ok(Some(drawing)) = sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
-        .bind(drawing_id)
+    // 获取 drawing 和 room
+    let drawing = match sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
+        .bind(fish_id)
         .fetch_optional(&state.db)
+        .await
+    {
+        Ok(Some(d)) if !d.is_eliminated => d,
+        _ => return,
+    };
+
+    let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+        .bind(drawing.room_id)
+        .fetch_one(&state.db)
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+
+    // 更新票数
+    let new_count: i32 = match sqlx::query_scalar(
+        "UPDATE drawings SET vote_count = vote_count + 1, updated_at = NOW() WHERE id = $1 RETURNING vote_count"
+    )
+    .bind(fish_id)
+    .fetch_one(&state.db)
+    .await {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    // 获取投票者列表
+    let voters: Vec<String> =
+        sqlx::query_scalar("SELECT session_id FROM votes WHERE drawing_id = $1")
+            .bind(fish_id)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
+
+    // 插入投票记录
+    let _ = sqlx::query(
+        "INSERT INTO votes (drawing_id, session_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(fish_id)
+    .bind(&data.voter_id)
+    .execute(&state.db)
+    .await;
+
+    // 广播 vote:update
+    let vote_update = serde_json::json!({
+        "fishId": data.fish_id,
+        "count": new_count,
+        "voters": voters
+    });
+    let _ = socket
+        .within(room.room_code.clone())
+        .emit("vote:update", &vote_update);
+
+    // 通知被投票者 vote:received
+    let vote_received = serde_json::json!({
+        "fishId": data.fish_id,
+        "voterId": data.voter_id
+    });
+    let _ = socket
+        .within(room.room_code.clone())
+        .emit("vote:received", &vote_received);
+
+    // 检查处决阈值 (4票)
+    const ELIMINATION_THRESHOLD: i32 = 4;
+    if new_count >= ELIMINATION_THRESHOLD {
+        // 标记为淘汰
+        let _ = sqlx::query(
+            "UPDATE drawings SET is_eliminated = TRUE, eliminated_at = NOW() WHERE id = $1",
+        )
+        .bind(fish_id)
+        .execute(&state.db)
+        .await;
+
+        // 获取投票者名字
+        let killer_names: Vec<String> = voters.clone();
+
+        // 广播 fish:eliminate
+        let eliminate_data = serde_json::json!({
+            "fishId": data.fish_id,
+            "fishName": drawing.name,
+            "isAI": drawing.is_ai,
+            "fishOwnerId": drawing.session_id.unwrap_or_default(),
+            "killerNames": killer_names
+        });
+        let _ = socket
+            .within(room.room_code.clone())
+            .emit("fish:eliminate", &eliminate_data);
+
+        // 更新 AI 计数
+        if drawing.is_ai {
+            let _ = sqlx::query("UPDATE rooms SET ai_count = ai_count - 1 WHERE id = $1")
+                .bind(room.id)
+                .execute(&state.db)
+                .await;
+        }
+
+        // 检查游戏结束条件
+        check_game_end(&socket, &state, &room).await;
+    }
+}
+
+/// 撤票 (换目标时)
+async fn on_vote_retract(
+    socket: SocketRef,
+    Data(data): Data<BattleVoteCastData>,
+    state: SioState<Arc<AppState>>,
+) {
+    info!("[Socket.IO] Vote retract: {:?}", data);
+
+    let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
+        Ok(id) => id,
+        Err(_) => return,
+    };
+
+    // 减少票数
+    let new_count: i32 = match sqlx::query_scalar(
+        "UPDATE drawings SET vote_count = GREATEST(vote_count - 1, 0), updated_at = NOW() WHERE id = $1 RETURNING vote_count"
+    )
+    .bind(fish_id)
+    .fetch_one(&state.db)
+    .await {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    // 删除投票记录
+    let _ = sqlx::query("DELETE FROM votes WHERE drawing_id = $1 AND session_id = $2")
+        .bind(fish_id)
+        .bind(&data.voter_id)
+        .execute(&state.db)
+        .await;
+
+    // 获取房间
+    if let Ok(drawing) = sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
+        .bind(fish_id)
+        .fetch_one(&state.db)
         .await
     {
         if let Ok(room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
@@ -106,12 +244,86 @@ async fn on_vote_cast(
             .fetch_one(&state.db)
             .await
         {
-            // 广播投票更新到房间
-            let vote_data = serde_json::json!({
-                "itemId": data.item_id,
-                "voteCount": drawing.vote_count + 1
+            // 获取剩余投票者
+            let voters: Vec<String> =
+                sqlx::query_scalar("SELECT session_id FROM votes WHERE drawing_id = $1")
+                    .bind(fish_id)
+                    .fetch_all(&state.db)
+                    .await
+                    .unwrap_or_default();
+
+            // 广播更新
+            let vote_update = serde_json::json!({
+                "fishId": data.fish_id,
+                "count": new_count,
+                "voters": voters
             });
-            let _ = socket.within(room.room_code).emit("vote:cast", &vote_data);
+            let _ = socket
+                .within(room.room_code)
+                .emit("vote:update", &vote_update);
+        }
+    }
+}
+
+/// 追击 (重复投同目标，只重置CD)
+async fn on_vote_chase(
+    socket: SocketRef,
+    Data(data): Data<BattleVoteCastData>,
+    _state: SioState<Arc<AppState>>,
+) {
+    info!("[Socket.IO] Vote chase: {:?}", data);
+    // 追击不增加票数，仅记录日志
+    // 前端已处理 CD 重置
+}
+
+/// 检查游戏结束条件
+async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
+    // 获取存活统计
+    let stats: Option<(i64, i64)> = sqlx::query_as(
+        "SELECT 
+            COUNT(*) FILTER (WHERE is_ai = TRUE AND is_eliminated = FALSE) as ai_alive,
+            COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = FALSE) as human_alive
+         FROM drawings WHERE room_id = $1",
+    )
+    .bind(room.id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
+    if let Some((ai_alive, human_alive)) = stats {
+        const VICTORY_MIN_HUMAN: i64 = 5;
+        const DEFEAT_AI_COUNT: i64 = 5;
+
+        // 胜利: AI 全灭 + 人类 >= 5
+        if ai_alive == 0 && human_alive >= VICTORY_MIN_HUMAN {
+            let victory_data = serde_json::json!({
+                "mvpId": "",
+                "mvpName": "Unknown",
+                "aiRemaining": ai_alive,
+                "humanRemaining": human_alive
+            });
+            let _ = socket
+                .within(room.room_code.clone())
+                .emit("game:victory", &victory_data);
+            let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+                .bind(room.id)
+                .execute(&state.db)
+                .await;
+        }
+        // 失败: AI > 5
+        else if ai_alive > DEFEAT_AI_COUNT {
+            let defeat_data = serde_json::json!({
+                "aiRemaining": ai_alive,
+                "humanRemaining": human_alive
+            });
+            let _ = socket
+                .within(room.room_code.clone())
+                .emit("game:defeat", &defeat_data);
+            let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+                .bind(room.id)
+                .execute(&state.db)
+                .await;
         }
     }
 }
@@ -147,6 +359,13 @@ struct RoomLeaveData {
 #[serde(rename_all = "camelCase")]
 struct VoteCastData {
     item_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BattleVoteCastData {
+    fish_id: String,
+    voter_id: String,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
