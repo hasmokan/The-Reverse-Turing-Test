@@ -1,12 +1,13 @@
 /**
  * 视觉模型 API 服务模块
- * 用于调用 ModelScope Qwen3-VL 视觉模型判断画作是否符合主题
+ * 使用阶跃星辰 Step 视觉理解模型判断画作是否符合主题
+ * API 文档: https://platform.stepfun.com/docs/llm/vision
  */
 
 // API 配置 - 从环境变量读取
-const VISION_API_URL = process.env.NEXT_PUBLIC_VISION_API_URL || 'https://api-inference.modelscope.cn/v1'
+const VISION_API_URL = process.env.NEXT_PUBLIC_VISION_API_URL || 'https://api.stepfun.com/v1'
 const VISION_API_KEY = process.env.NEXT_PUBLIC_VISION_API_KEY || ''
-const VISION_MODEL = process.env.NEXT_PUBLIC_VISION_MODEL || 'Qwen/Qwen3-VL-235B-A22B-Instruct'
+const VISION_MODEL = process.env.NEXT_PUBLIC_VISION_MODEL || 'step-1o-turbo-vision'
 
 export interface ImageReviewResult {
   isValid: boolean
@@ -23,7 +24,7 @@ export interface ImageReviewOptions {
 }
 
 /**
- * 调用 Qwen3-VL 视觉模型判断图片内容
+ * 调用阶跃星辰视觉模型判断图片内容
  */
 export async function reviewImageWithMiniMax(
   options: ImageReviewOptions
@@ -38,13 +39,14 @@ export async function reviewImageWithMiniMax(
   // 构建提示词
   const prompt = buildReviewPrompt(themeName, themeKeywords)
 
-  console.log('[VisionAPI] 开始审核图片...')
-  console.log('[VisionAPI] API URL:', VISION_API_URL)
-  console.log('[VisionAPI] Model:', VISION_MODEL)
-  console.log('[VisionAPI] 主题:', themeName)
-  console.log('[VisionAPI] 关键词:', themeKeywords)
+  console.log('[StepVision] 开始审核图片...')
+  console.log('[StepVision] API URL:', VISION_API_URL)
+  console.log('[StepVision] Model:', VISION_MODEL)
+  console.log('[StepVision] 主题:', themeName)
+  console.log('[StepVision] 关键词:', themeKeywords)
 
   try {
+    // 阶跃星辰 API 兼容 OpenAI 格式
     const requestBody = {
       model: VISION_MODEL,
       messages: [
@@ -54,7 +56,7 @@ export async function reviewImageWithMiniMax(
             {
               type: 'image_url',
               image_url: {
-                url: imageBase64,
+                url: imageBase64, // 支持 data:image/png;base64,... 格式
               },
             },
             {
@@ -77,24 +79,24 @@ export async function reviewImageWithMiniMax(
       body: JSON.stringify(requestBody),
     })
 
-    console.log('[VisionAPI] 响应状态:', response.status)
+    console.log('[StepVision] 响应状态:', response.status)
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[VisionAPI] API Error:', response.status, errorText)
+      console.error('[StepVision] API Error:', response.status, errorText)
       throw new Error(`视觉 API 错误: ${response.status} - ${errorText}`)
     }
 
     const data = await response.json()
-    console.log('[VisionAPI] 响应数据:', JSON.stringify(data, null, 2))
+    console.log('[StepVision] 响应数据:', JSON.stringify(data, null, 2))
 
     const content = data.choices?.[0]?.message?.content || ''
-    console.log('[VisionAPI] AI 回复:', content)
+    console.log('[StepVision] AI 回复:', content)
 
     // 解析模型响应
     return parseReviewResponse(content, themeKeywords)
   } catch (error) {
-    console.error('[VisionAPI] Request failed:', error)
+    console.error('[StepVision] Request failed:', error)
     throw error
   }
 }
@@ -120,11 +122,11 @@ function buildReviewPrompt(themeName: string, keywords: string[]): string {
 ### 鱼的形态特征：
 - 单个模糊的、难以辨认的团块，隐约呈现鱼的形状
 - 形状怪异、凹凸不平
-- 轮廓由粗糙的单线构成（固定20px笔刷），线条抖动、可能不闭合
+- 轮廓由粗糙的单线构成（固定笔刷），线条抖动、可能不闭合
 - 眼睛要么是一个极其粗糙的实心圆点，要么完全没有
 - 没有鱼鳍或极度简化
 - "尾巴"只是一个随机的、不对称的线条延伸
-- 填充线条潦草（5-20px笔刷），可能溢出轮廓边界
+- 填充线条潦草，可能溢出轮廓边界
 
 ### 背景：
 - 应该是纯白色背景，无其他元素
@@ -141,10 +143,9 @@ function buildReviewPrompt(themeName: string, keywords: string[]): string {
 ## 判断标准优先级：
 1. **必须是简笔画风格** - 如果是照片、精细绘画、3D渲染等，直接判定不符合
 2. **必须能识别出鱼的基本特征** - 即使很丑很抽象，也要有类似鱼的轮廓/形态
-3. **颜色应符合5色规则** - 使用了规定颜色之外的颜色会降低置信度
-4. **越丑越幼稚越好** - 画得太精美反而不符合要求
-5. **完全无关内容（如房子、汽车、人物等）判定为不符合**
-6. **空白画布或纯色块判定为不符合**`
+3. **越丑越幼稚越好** - 画得太精美反而不符合要求
+4. **完全无关内容（如房子、汽车、人物等）判定为不符合**
+5. **空白画布或纯色块判定为不符合**`
 }
 
 /**
@@ -165,7 +166,7 @@ function parseReviewResponse(content: string, keywords: string[]): ImageReviewRe
       }
     }
   } catch (e) {
-    console.warn('[MiniMax] Failed to parse JSON response:', e)
+    console.warn('[StepVision] Failed to parse JSON response:', e)
   }
 
   // 如果解析失败，尝试从文本中推断
@@ -202,22 +203,16 @@ export function mockReviewImage(options: ImageReviewOptions): ImageReviewResult 
  * 检查是否配置了 API Key（优先环境变量，其次 localStorage）
  */
 export function hasMinimaxApiKey(): boolean {
-  // 调试日志
-  console.log('[hasMinimaxApiKey] VISION_API_KEY from env:', VISION_API_KEY)
-  console.log('[hasMinimaxApiKey] VISION_API_KEY length:', VISION_API_KEY?.length)
-
   // 优先检查环境变量
   if (VISION_API_KEY && VISION_API_KEY.length > 10) {
-    console.log('[hasMinimaxApiKey] Using env API key')
+    console.log('[StepVision] Using env API key')
     return true
   }
   // 其次检查 localStorage
   if (typeof window === 'undefined') {
-    console.log('[hasMinimaxApiKey] Running on server, no localStorage')
     return false
   }
   const key = localStorage.getItem('vision_api_key')
-  console.log('[hasMinimaxApiKey] localStorage key:', key ? `${key.slice(0, 10)}...` : 'null')
   return Boolean(key && key.length > 10)
 }
 
