@@ -44,7 +44,8 @@ jobs:
           git remote add modelscope "http://oauth2:${MODELSCOPE_TOKEN}@www.modelscope.cn/studios/hasmokan/The-Reverse-Turing-Test.git"
 
           # 推送到魔搭（main -> master）
-          git push modelscope main:master
+          # 使用 --force 因为 GitHub 是主仓库，ModelScope 仅作为部署目标
+          git push --force modelscope main:master
 
           echo ""
           echo "✅ Deploy complete!"
