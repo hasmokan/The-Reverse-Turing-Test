@@ -51,8 +51,8 @@ impl AppState {
             serde_json::from_value(theme.ai_keywords.clone()).unwrap_or_default();
 
         let callback_url = format!(
-            "http://{}:{}/api/n8n/callback",
-            self.config.host, self.config.port
+            "{}/api/n8n/callback",
+            self.config.callback_host
         );
 
         let request = TriggerN8nRequest {

@@ -8,40 +8,44 @@
                 "responseMode": "responseNode",
                 "options": {}
             },
-            "id": "webhook-trigger",
-            "name": "Webhook",
+            "id": "webhook-001",
+            "name": "MimicWebhook",
             "type": "n8n-nodes-base.webhook",
             "typeVersion": 2,
-            "position": [
-                220,
-                300
-            ],
+            "position": [-600, 80],
             "webhookId": "mimic-ai-generate"
         },
         {
             "parameters": {
+                "jsCode": "// Get webhook data - check both direct and body locations\nconst raw = $input.first().json;\nconst webhookData = raw.body || raw;\n\n// Safely get theme data with defaults\nconst theme = webhookData.theme || { keywords: ['cat'] };\nconst keywords = theme.keywords || ['cat'];\nconst subject = keywords[Math.floor(Math.random() * keywords.length)];\n\n// Random 2 colors from pool\nconst colorPool = ['#000000', '#FF2A2A', '#1F75FE', '#00CC44', '#FF9900'];\nconst shuffled = [...colorPool].sort(() => Math.random() - 0.5);\nconst outlineColor = shuffled[0];\nconst fillColor = shuffled[1];\n\nconst prompt = `A deliberately ugly, naive digital finger painting. The style is crude, child-like, and messy, mimicking a shaky finger on a screen with absolutely no pressure sensitivity. The final image must look like it was drawn in a basic paint program.\n\nSTRICT 2-COLOR ONLY: Use ONLY these two colors - Outline: ${outlineColor}, Fill: ${fillColor}. No gradients, no other colors.\n\nSubject: A single, amorphous, unrecognizable blob that barely suggests a ${subject}.\n- Shape: The form is twisted, lumpy, and primitive. It barely resembles the actual object.\n- Features are crude, asymmetrical, or disconnected. Eyes floating, limbs missing or wrong size.\n- Outline Style: One single, extremely thick, rough, jittery line (approx 20px brush).\n- Fill Style: Thick, sloppy scribbled lines that violently spill over the outline borders.\n\nBackground: Isolated on a flat, pure white background. No UI elements, no toolbars, no text.`;\n\nreturn {\n  callback_url: webhookData.callback_url || 'http://localhost:8080/api/n8n/callback',\n  task_id: webhookData.task_id || 'default-task',\n  theme: theme,\n  subject: subject,\n  requestBody: {\n    contents: [{ role: 'user', parts: [{ text: prompt }] }],\n    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }\n  }\n};"
+            },
+            "id": "code-001",
+            "name": "MimicBuildRequest",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [-400, 80]
+        },
+        {
+            "parameters": {
                 "method": "POST",
-                "url": "https://api.zenmux.ai/v1/images/generations",
+                "url": "https://zenmux.ai/api/vertex-ai/v1/models/google/gemini-3-pro-image-preview:generateContent",
                 "authentication": "predefinedCredentialType",
                 "nodeCredentialType": "httpBearerAuth",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({\n  \"model\": \"google/gemini-3-pro-image-preview\",\n  \"prompt\": `A ${$json.theme.prompt_style} of a ${$json.theme.keywords[Math.floor(Math.random() * $json.theme.keywords.length)]}, colors: ${$json.theme.palette.slice(0, 3).join(', ')}`,\n  \"n\": 1,\n  \"size\": \"256x256\",\n  \"response_format\": \"b64_json\"\n}) }}",
+                "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
                 "options": {
-                    "timeout": 60000
+                    "timeout": 120000
                 }
             },
-            "id": "generate-image",
-            "name": "Generate AI Image",
+            "id": "http-001",
+            "name": "MimicGenerate",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
-            "position": [
-                440,
-                300
-            ],
+            "position": [-180, 80],
             "credentials": {
                 "httpBearerAuth": {
-                    "id": "zenmux-api",
+                    "id": "ENfNmfV1sKcykqsO",
                     "name": "Zenmux API"
                 }
             },
@@ -50,112 +54,75 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ $('Webhook').item.json.callback_url }}",
+                "url": "={{ $('MimicBuildRequest').item.json.callback_url }}",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({\n  \"task_id\": $('Webhook').item.json.task_id,\n  \"status\": \"completed\",\n  \"image_data\": 'data:image/png;base64,' + $json.data[0].b64_json,\n  \"name\": $('Webhook').item.json.theme.keywords[Math.floor(Math.random() * $('Webhook').item.json.theme.keywords.length)]\n}) }}",
+                "jsonBody": "={{ (() => {\n  const req = $('MimicBuildRequest').item.json;\n  const response = $json;\n  let imageData = null;\n  let textContent = null;\n  \n  if (response.candidates && response.candidates[0] && response.candidates[0].content && response.candidates[0].content.parts) {\n    for (const part of response.candidates[0].content.parts) {\n      if (part.inlineData && part.inlineData.data) {\n        imageData = 'data:' + (part.inlineData.mimeType || 'image/png') + ';base64,' + part.inlineData.data;\n      }\n      if (part.text && !part.thought) {\n        textContent = part.text;\n      }\n    }\n  }\n  \n  return JSON.stringify({\n    task_id: req.task_id,\n    status: imageData ? 'completed' : 'failed',\n    image_data: imageData,\n    name: req.theme.keywords[Math.floor(Math.random() * req.theme.keywords.length)],\n    text_content: textContent\n  });\n})() }}",
                 "options": {}
             },
-            "id": "callback-success",
-            "name": "Callback Success",
+            "id": "http-002",
+            "name": "MimicCallbackOK",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
-            "position": [
-                660,
-                220
-            ]
+            "position": [60, 0]
         },
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ $('Webhook').item.json.callback_url }}",
+                "url": "={{ $('MimicBuildRequest').item.json.callback_url }}",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({\n  \"task_id\": $('Webhook').item.json.task_id,\n  \"status\": \"failed\",\n  \"error_message\": $json.error?.message || 'Unknown error'\n}) }}",
+                "jsonBody": "={{ JSON.stringify({ task_id: $('MimicBuildRequest').item.json.task_id, status: 'failed', error_message: $json.error?.message || 'Unknown error' }) }}",
                 "options": {}
             },
-            "id": "callback-error",
-            "name": "Callback Error",
+            "id": "http-003",
+            "name": "MimicCallbackErr",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
-            "position": [
-                660,
-                400
-            ]
+            "position": [60, 192]
         },
         {
             "parameters": {
                 "respondWith": "json",
-                "responseBody": "={{ JSON.stringify({ \"received\": true, \"task_id\": $('Webhook').item.json.task_id }) }}"
+                "responseBody": "={{ JSON.stringify({ received: true, task_id: $('MimicBuildRequest').item.json.task_id }) }}",
+                "options": {}
             },
-            "id": "respond-webhook",
-            "name": "Respond to Webhook",
+            "id": "respond-001",
+            "name": "MimicRespond",
             "type": "n8n-nodes-base.respondToWebhook",
             "typeVersion": 1.1,
-            "position": [
-                880,
-                300
-            ]
+            "position": [280, 80]
         }
     ],
+    "pinData": {},
     "connections": {
-        "Webhook": {
+        "MimicWebhook": {
+            "main": [[{"node": "MimicBuildRequest", "type": "main", "index": 0}]]
+        },
+        "MimicBuildRequest": {
+            "main": [[{"node": "MimicGenerate", "type": "main", "index": 0}]]
+        },
+        "MimicGenerate": {
             "main": [
-                [
-                    {
-                        "node": "Generate AI Image",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
+                [{"node": "MimicCallbackOK", "type": "main", "index": 0}],
+                [{"node": "MimicCallbackErr", "type": "main", "index": 0}]
             ]
         },
-        "Generate AI Image": {
-            "main": [
-                [
-                    {
-                        "node": "Callback Success",
-                        "type": "main",
-                        "index": 0
-                    }
-                ],
-                [
-                    {
-                        "node": "Callback Error",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
+        "MimicCallbackOK": {
+            "main": [[{"node": "MimicRespond", "type": "main", "index": 0}]]
         },
-        "Callback Success": {
-            "main": [
-                [
-                    {
-                        "node": "Respond to Webhook",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Callback Error": {
-            "main": [
-                [
-                    {
-                        "node": "Respond to Webhook",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
+        "MimicCallbackErr": {
+            "main": [[{"node": "MimicRespond", "type": "main", "index": 0}]]
         }
     },
+    "active": true,
     "settings": {
         "executionOrder": "v1"
     },
-    "staticData": null,
-    "tags": [],
-    "triggerCount": 0,
-    "pinData": {}
+    "versionId": "v3-code-node",
+    "meta": {
+        "instanceId": "mimic-ai-v3"
+    },
+    "id": "MimicAI-v3",
+    "tags": []
 }

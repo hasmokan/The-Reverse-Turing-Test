@@ -9,6 +9,41 @@ use uuid::Uuid;
 use crate::models::{CreateRoomRequest, DrawingListItem, Room, RoomResponse, Theme, ThemeResponse};
 use crate::services::{ApiError, AppState};
 
+/// POST /api/rooms/:room_code/trigger-ai - 手动触发 AI 生成 (测试用)
+pub async fn trigger_ai(
+    State(state): State<Arc<AppState>>,
+    Path(room_code): Path<String>,
+) -> Result<Json<TriggerAiResponse>, ApiError> {
+    // 获取房间
+    let room: Room = sqlx::query_as("SELECT * FROM rooms WHERE room_code = $1")
+        .bind(&room_code)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(ApiError::NotFound(format!("Room {} not found", room_code)))?;
+
+    // 获取主题
+    let theme: Theme = sqlx::query_as("SELECT * FROM themes WHERE id = $1")
+        .bind(room.theme_id)
+        .fetch_one(&state.db)
+        .await?;
+
+    // 触发 AI 生成
+    state.trigger_ai_generation(room.id, &theme).await;
+
+    Ok(Json(TriggerAiResponse {
+        message: "AI generation triggered".to_string(),
+        room_code,
+        theme_name: theme.theme_name,
+    }))
+}
+
+#[derive(serde::Serialize)]
+pub struct TriggerAiResponse {
+    pub message: String,
+    pub room_code: String,
+    pub theme_name: String,
+}
+
 /// POST /api/rooms - 创建房间
 pub async fn create_room(
     State(state): State<Arc<AppState>>,

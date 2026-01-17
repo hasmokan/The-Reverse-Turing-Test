@@ -106,6 +106,10 @@ fn api_routes(state: Arc<AppState>) -> Router {
         // Rooms
         .route("/rooms", post(routes::rooms::create_room))
         .route("/rooms/:room_code", get(routes::rooms::get_room))
+        .route(
+            "/rooms/:room_code/trigger-ai",
+            post(routes::rooms::trigger_ai),
+        )
         // Drawings - 合并 GET 和 POST 到同一路径
         .route(
             "/rooms/:room_code/drawings",
