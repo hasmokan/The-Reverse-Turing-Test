@@ -23,20 +23,23 @@ RUN cargo build --release
 # ============================================
 FROM node:20-slim AS frontend-builder
 
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 WORKDIR /app/frontend
 
 # Copy package files
-COPY frontend/package*.json ./
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
 
 # Install dependencies
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Copy frontend source
 COPY frontend/ ./
 
 # Build Next.js (standalone output)
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN pnpm run build
 
 # ============================================
 # Stage 3: Production Runtime
