@@ -15,6 +15,10 @@ RUN apt-get update && apt-get install -y \
 COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/src ./src
 
+# Downgrade home crate to version compatible with Rust 1.85
+# home 0.5.12 requires rustc 1.88 which is not yet available
+RUN cargo update home@0.5.12 --precise 0.5.9
+
 # Build release binary (limit parallelism to reduce memory usage)
 RUN CARGO_BUILD_JOBS=2 cargo build --release
 
