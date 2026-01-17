@@ -8,7 +8,7 @@ export const fishTankTheme: ThemeConfig = {
     background_url: '/backgrounds/fish-tank.svg',
     particle_effect: 'bubbles',
   },
-  palette: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'],
+  palette: ['#FF2A2A', '#1F75FE', '#00CC44', '#FF9900'],
   ai_settings: {
     keywords: ['fish', 'whale', 'shark', 'octopus', 'jellyfish', 'crab'],
     prompt_style: 'children\'s drawing, scribble, thick marker lines, wobbly lines, MS paint style, no shading, flat color',

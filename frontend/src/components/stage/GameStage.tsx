@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { GameItem } from '@/types'
+import { GrabEffect } from '@/components/effects/GrabEffect'
 
 interface GameStageProps {
   onItemClick?: (item: GameItem) => void
@@ -152,6 +153,9 @@ export function GameStage({ onItemClick }: GameStageProps) {
       {phase === 'gameover' && (
         <GameOverOverlay />
       )}
+
+      {/* 处决动画（机械手）- 在 GameStage 内部，使用相对定位 */}
+      <GrabEffect isInsideStage />
     </div>
   )
 }

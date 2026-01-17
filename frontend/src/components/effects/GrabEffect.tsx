@@ -48,7 +48,7 @@ const MechanicalArmSVG = () => (
   </svg>
 )
 
-export function GrabEffect() {
+export function GrabEffect({ isInsideStage = false }: { isInsideStage?: boolean }) {
   const eliminationAnimation = useGameStore((state) => state.eliminationAnimation)
   const clearEliminationAnimation = useGameStore((state) => state.clearEliminationAnimation)
   const removeItem = useGameStore((state) => state.removeItem)
@@ -58,6 +58,7 @@ export function GrabEffect() {
 
   const [stage, setStage] = useState<'idle' | 'descend' | 'grab' | 'ascend'>('idle')
   const [targetPosition, setTargetPosition] = useState({ x: 0, y: 0 })
+  const [targetImageUrl, setTargetImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!eliminationAnimation) {
@@ -65,13 +66,14 @@ export function GrabEffect() {
       return
     }
 
-    // 获取目标鱼的位置
+    // 获取目标鱼的位置和图片
     const targetItem = items.find((item) => item.id === eliminationAnimation.fishId)
     if (targetItem) {
       setTargetPosition({
         x: targetItem.position.x,
         y: targetItem.position.y,
       })
+      setTargetImageUrl(targetItem.imageUrl)
     }
 
     // 动画序列
@@ -103,6 +105,7 @@ export function GrabEffect() {
       // 清除动画状态
       clearEliminationAnimation()
       setStage('idle')
+      setTargetImageUrl(null)
     }, ELIMINATION_ANIMATION_DURATION.grab + ELIMINATION_ANIMATION_DURATION.pull + ELIMINATION_ANIMATION_DURATION.exit)
 
     return () => {
@@ -117,7 +120,7 @@ export function GrabEffect() {
   }
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-[80]">
+    <div className={`${isInsideStage ? 'absolute' : 'fixed'} inset-0 pointer-events-none z-[80]`}>
       {/* 机械手动画 */}
       <motion.div
         className="absolute"
@@ -148,9 +151,9 @@ export function GrabEffect() {
       </motion.div>
 
       {/* 被抓取时的鱼（跟随机械手上升） */}
-      {(stage === 'grab' || stage === 'ascend') && (
+      {(stage === 'grab' || stage === 'ascend') && targetImageUrl && (
         <motion.div
-          className="absolute w-16 h-16 flex items-center justify-center"
+          className="absolute w-20 h-20 flex items-center justify-center"
           style={{
             left: targetPosition.x,
             transform: 'translateX(-50%)',
@@ -165,7 +168,12 @@ export function GrabEffect() {
             ease: 'easeIn',
           }}
         >
-          <span className="text-4xl">🐟</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={targetImageUrl}
+            alt="被抓取的鱼"
+            className="w-16 h-16 object-contain"
+          />
         </motion.div>
       )}
 

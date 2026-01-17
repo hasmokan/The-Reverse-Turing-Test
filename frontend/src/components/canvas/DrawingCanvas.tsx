@@ -29,7 +29,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
   const outlineBrushSize = 10 // 勾边模式固定 10px
   const fillBrushSize = 10 // 填色模式固定 10px
   const [brushMode, setBrushMode] = useState<BrushMode>('outline') // 默认勾边模式
-  const [currentColor, setCurrentColor] = useState<string>('#333333') // 勾边默认黑色
+  const [currentColor, setCurrentColor] = useState<string>('#FF6B6B') // 勾边默认颜色
   const [history, setHistory] = useState<{ fill: ImageData; outline: ImageData }[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [hasOutlineDrawn, setHasOutlineDrawn] = useState(false) // 是否已经画过勾边
@@ -49,8 +49,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
     '#FF85A2', // 粉红
   ]
 
-  // 勾边专用颜色（深色系）
-  const outlineColors = ['#333333', '#1a1a2e', '#4a4e69', '#22223b', '#3d405b']
+  // 勾边专用颜色（仅允许 #FF6B6B）
+  const outlineColors = ['#FF6B6B']
 
   // 初始化双层画布
   useEffect(() => {
@@ -273,7 +273,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
     outlineCtx.clearRect(0, 0, outlineCanvas.width, outlineCanvas.height)
     setHasOutlineDrawn(false) // 重置勾边状态
     setBrushMode('outline') // 回到勾边模式
-    setCurrentColor('#333333') // 重置颜色
+    setCurrentColor('#FF6B6B') // 重置颜色
     saveToHistory()
   }, [saveToHistory])
 

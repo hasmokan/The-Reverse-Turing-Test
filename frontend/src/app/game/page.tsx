@@ -21,7 +21,7 @@ import { useBattleSystem } from '@/hooks/useBattleSystem'
 // 战斗系统组件
 import { ToastContainer, AttackWarning } from '@/components/feedback'
 import { CooldownHUD } from '@/components/hud'
-import { FloatingDamageLayer, GrabEffect } from '@/components/effects'
+import { FloatingDamageLayer } from '@/components/effects'
 import { VictoryScreen, DefeatScreen } from '@/components/result'
 
 export default function GamePage() {
@@ -203,9 +203,6 @@ export default function GamePage() {
 
       {/* 漂浮伤害数字 */}
       <FloatingDamageLayer />
-
-      {/* 处决动画（机械手） */}
-      <GrabEffect />
 
       {/* 胜利界面 */}
       <VictoryScreen />

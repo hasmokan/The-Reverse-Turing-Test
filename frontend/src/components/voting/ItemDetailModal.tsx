@@ -147,7 +147,7 @@ export function ItemDetailModal({
               onClick={onClose}
               whileHover={{ scale: 1.15, rotate: 90 }}
               whileTap={{ scale: 0.9 }}
-              className="absolute top-4 right-4 w-10 h-10 bg-gradient-to-br from-red-400 to-pink-400 rounded-full flex items-center justify-center text-white font-bold shadow-lg z-10 hand-drawn-button border-red-500"
+              className="absolute top-4 right-4 w-10 h-10 bg-gradient-to-br from-red-400 to-pink-400 rounded-full flex items-center justify-center text-white font-bold shadow-lg z-30 hand-drawn-button border-red-500"
             >
               ✕
             </motion.button>

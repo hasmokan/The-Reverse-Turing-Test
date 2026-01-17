@@ -76,7 +76,7 @@ export default function HomePage() {
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', duration: 0.8 }}
-        className="text-center mb-10 relative z-10"
+        className="text-center mb-4 sm:mb-8 md:mb-10 relative z-10"
       >
         <motion.div
           animate={{
@@ -84,26 +84,31 @@ export default function HomePage() {
             scale: [1, 1.1, 1, 1.05, 1]
           }}
           transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
-          className="text-9xl mb-6 filter drop-shadow-2xl"
+          className="mb-3 sm:mb-6 filter drop-shadow-2xl"
         >
-          🎭
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/backgrounds/20260118-015657.png"
+            alt="Logo"
+            className="w-16 h-16 sm:w-24 sm:h-24 md:w-32 md:h-32 mx-auto object-contain"
+          />
         </motion.div>
         <motion.h1
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 font-sketch mb-4 transform -rotate-1"
+          className="text-3xl sm:text-4xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 font-sketch mb-2 sm:mb-4 transform -rotate-1"
           style={{
             textShadow: '3px 3px 0px rgba(255,182,193,0.5), -2px -2px 0px rgba(135,206,250,0.3)'
           }}
         >
-          谁是AI卧底
+          反方向的图灵
         </motion.h1>
         <motion.p
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="text-2xl text-pink-600 font-sketch transform rotate-1 mb-2"
+          className="text-base sm:text-xl md:text-2xl text-pink-600 font-sketch transform rotate-1 mb-1 sm:mb-2"
         >
           Project Mimic
         </motion.p>
@@ -111,7 +116,7 @@ export default function HomePage() {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.6, type: 'spring' }}
-          className="inline-block px-6 py-2 bg-yellow-300 border-3 border-yellow-600 rounded-full transform -rotate-2 shadow-lg"
+          className="inline-block px-4 py-1.5 sm:px-6 sm:py-2 bg-yellow-300 border-3 border-yellow-600 rounded-full transform -rotate-2 shadow-lg"
         >
           <p className="text-sm text-yellow-900 font-bold">
             🎨 画出涂鸦，找出混入的 AI！
@@ -152,114 +157,147 @@ export default function HomePage() {
           </motion.div>
         )}
 
-        {Object.values(themes).map((theme, index) => (
-          <motion.button
-            key={theme.theme_id}
-            initial={{ x: index % 2 === 0 ? -50 : 50, opacity: 0, rotate: index % 2 === 0 ? -5 : 5 }}
-            animate={{ x: 0, opacity: 1, rotate: 0 }}
-            transition={{ delay: 0.4 + index * 0.15, type: 'spring', stiffness: 100 }}
-            whileHover={{
-              scale: loading ? 1 : 1.05,
-              rotate: index % 2 === 0 ? 2 : -2,
-              transition: { duration: 0.3 }
-            }}
-            whileTap={{ scale: 0.95, rotate: 0 }}
-            onClick={() => handleSelectRoom(theme.theme_id)}
-            disabled={loading !== null}
-            className="w-full scribble-card overflow-hidden group relative disabled:opacity-70"
-            style={{
-              borderColor: theme.palette[0] || '#FF6B9D'
-            }}
-          >
-            {/* 加载遮罩 */}
-            {loading === theme.theme_id && (
-              <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                  className="text-4xl"
-                >
-                  🎨
-                </motion.div>
-              </div>
-            )}
+        {Object.values(themes).map((theme, index) => {
+          // 只有第一个主题（鱼缸）解锁，其他上锁
+          const isLocked = theme.theme_id !== 'fish_tank_01'
 
-            {/* 预览图 */}
-            <div
-              className="h-40 bg-cover bg-center relative overflow-hidden"
+          return (
+            <motion.button
+              key={theme.theme_id}
+              initial={{ x: index % 2 === 0 ? -50 : 50, opacity: 0, rotate: index % 2 === 0 ? -5 : 5 }}
+              animate={{ x: 0, opacity: 1, rotate: 0 }}
+              transition={{ delay: 0.4 + index * 0.15, type: 'spring', stiffness: 100 }}
+              whileHover={isLocked ? {} : {
+                scale: loading ? 1 : 1.05,
+                rotate: index % 2 === 0 ? 2 : -2,
+                transition: { duration: 0.3 }
+              }}
+              whileTap={isLocked ? {} : { scale: 0.95, rotate: 0 }}
+              onClick={() => !isLocked && handleSelectRoom(theme.theme_id)}
+              disabled={loading !== null || isLocked}
+              className={`w-full scribble-card overflow-hidden group relative ${isLocked ? 'cursor-not-allowed' : ''} disabled:opacity-70`}
               style={{
-                backgroundImage: `url(${theme.assets.background_url})`,
+                borderColor: isLocked ? '#9CA3AF' : (theme.palette[0] || '#FF6B9D')
               }}
             >
-              {/* 渐变遮罩 */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+              {/* 上锁遮罩 */}
+              {isLocked && (
+                <div className="absolute inset-0 bg-gray-900/70 z-20 flex flex-col items-center justify-center backdrop-blur-sm">
+                  <motion.div
+                    animate={{
+                      rotate: [0, -10, 10, -5, 5, 0],
+                      scale: [1, 1.1, 1]
+                    }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="text-6xl mb-4"
+                  >
+                    🔒
+                  </motion.div>
+                  <p className="text-white/90 text-lg font-bold text-center px-4 font-sketch">
+                    前面的区域以后再来探索吧
+                  </p>
+                  <p className="text-white/60 text-sm mt-2">
+                    敬请期待...
+                  </p>
+                </div>
+              )}
 
-              {/* 星星装饰 */}
-              <motion.div
-                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute top-3 right-3 text-2xl"
-              >
-                ✨
-              </motion.div>
+              {/* 加载遮罩 */}
+              {loading === theme.theme_id && (
+                <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    className="text-4xl"
+                  >
+                    🎨
+                  </motion.div>
+                </div>
+              )}
 
-              {/* 主题标签 */}
-              <motion.div
-                whileHover={{ scale: 1.1, rotate: -3 }}
-                className="absolute top-4 left-4 px-5 py-2 bg-white/95 hand-drawn-border border-2 text-lg font-bold shadow-xl transform -rotate-2"
+              {/* 预览图 */}
+              <div
+                className={`h-40 bg-cover bg-center relative overflow-hidden ${isLocked ? 'grayscale' : ''}`}
                 style={{
-                  borderColor: theme.palette[1] || '#FFA06B'
+                  backgroundImage: `url(${theme.assets.background_url})`,
                 }}
               >
-                <span className="mr-2">{theme.theme_id === 'fish_tank_01' ? '🐠' : '☕'}</span>
-                <span className="text-gray-800">{theme.theme_name}</span>
-              </motion.div>
+                {/* 渐变遮罩 */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
-              {/* 进入提示 - 悬停显示 */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileHover={{ opacity: 1, scale: 1 }}
-                className="absolute bottom-4 right-4 px-5 py-2 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-full font-bold shadow-lg transform rotate-2"
-              >
-                点击进入 →
-              </motion.div>
-            </div>
+                {/* 星星装饰 */}
+                {!isLocked && (
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="absolute top-3 right-3 text-2xl"
+                  >
+                    ✨
+                  </motion.div>
+                )}
 
-            {/* 信息区 */}
-            <div className="p-5 bg-gradient-to-br from-white to-gray-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-600">🎨 画笔颜色</span>
-                  <div className="flex gap-2">
-                    {theme.palette.slice(0, 5).map((color, i) => (
-                      <motion.div
-                        key={color}
-                        whileHover={{ scale: 1.4, rotate: 360 }}
-                        transition={{ type: 'spring', stiffness: 300 }}
-                        className="w-7 h-7 rounded-full border-3 border-white shadow-md hover-bounce cursor-pointer"
-                        style={{
-                          backgroundColor: color,
-                          boxShadow: `0 2px 8px ${color}40`
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
+                {/* 主题标签 */}
                 <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold border-2 border-purple-300 transform rotate-2"
+                  whileHover={isLocked ? {} : { scale: 1.1, rotate: -3 }}
+                  className={`absolute top-4 left-4 px-5 py-2 bg-white/95 hand-drawn-border border-2 text-lg font-bold shadow-xl transform -rotate-2 ${isLocked ? 'opacity-60' : ''}`}
+                  style={{
+                    borderColor: isLocked ? '#9CA3AF' : (theme.palette[1] || '#FFA06B')
+                  }}
                 >
-                  {theme.ai_settings.keywords.length} 种物体
+                  <span className="mr-2">{theme.theme_id === 'fish_tank_01' ? '🐠' : '☕'}</span>
+                  <span className="text-gray-800">{theme.theme_name}</span>
                 </motion.div>
-              </div>
-            </div>
 
-            {/* 悬停光晕效果 */}
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
-            </div>
-          </motion.button>
-        ))}
+                {/* 进入提示 - 悬停显示（仅解锁时） */}
+                {!isLocked && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    whileHover={{ opacity: 1, scale: 1 }}
+                    className="absolute bottom-4 right-4 px-5 py-2 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-full font-bold shadow-lg transform rotate-2"
+                  >
+                    点击进入 →
+                  </motion.div>
+                )}
+              </div>
+
+              {/* 信息区 */}
+              <div className={`p-5 bg-gradient-to-br from-white to-gray-50 ${isLocked ? 'opacity-50' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-600">🎨 画笔颜色</span>
+                    <div className="flex gap-2">
+                      {theme.palette.slice(0, 5).map((color, i) => (
+                        <motion.div
+                          key={color}
+                          whileHover={isLocked ? {} : { scale: 1.4, rotate: 360 }}
+                          transition={{ type: 'spring', stiffness: 300 }}
+                          className={`w-7 h-7 rounded-full border-3 border-white shadow-md ${isLocked ? '' : 'hover-bounce cursor-pointer'}`}
+                          style={{
+                            backgroundColor: isLocked ? '#9CA3AF' : color,
+                            boxShadow: isLocked ? 'none' : `0 2px 8px ${color}40`
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {/* <motion.div
+                    whileHover={isLocked ? {} : { scale: 1.1 }}
+                    className={`px-3 py-1 rounded-full text-xs font-bold border-2 transform rotate-2 ${isLocked ? 'bg-gray-100 text-gray-500 border-gray-300' : 'bg-purple-100 text-purple-700 border-purple-300'}`}
+                  >
+                    {theme.ai_settings.keywords.length} 种物体
+                  </motion.div> */}
+                </div>
+              </div>
+
+              {/* 悬停光晕效果（仅解锁时） */}
+              {!isLocked && (
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
+                </div>
+              )}
+            </motion.button>
+          )
+        })}
       </motion.div>
 
       {/* 游戏说明 */}
