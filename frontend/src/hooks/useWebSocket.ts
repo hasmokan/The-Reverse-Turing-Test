@@ -137,7 +137,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
   useEffect(() => {
     if (!enabled || !roomId) return
 
-    const socketUrl = url || process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001'
+    const socketUrl = url || process.env.NEXT_PUBLIC_WS_URL || ''
 
     console.log('[WS] Connecting to:', socketUrl, 'Room:', roomId)
 

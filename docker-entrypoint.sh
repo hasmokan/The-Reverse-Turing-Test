@@ -1,26 +1,43 @@
 #!/bin/bash
 set -e
 
-# Create log directory
-mkdir -p /var/log/supervisor
+PGDATA_DIR="/mnt/workspace/postgresql/data"
+REDIS_DIR="/mnt/workspace/redis"
+LOG_DIR="/var/log/supervisor"
 
-# Initialize PostgreSQL if not already done
-if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
-    echo "Initializing PostgreSQL database..."
-    su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D /var/lib/postgresql/data"
+mkdir -p "$LOG_DIR"
+mkdir -p "$REDIS_DIR"
+mkdir -p "$(dirname $PGDATA_DIR)"
+
+if [ ! -f "$PGDATA_DIR/PG_VERSION" ]; then
+    echo "[PostgreSQL] Initializing database at $PGDATA_DIR..."
     
-    # Start PostgreSQL temporarily to create database
-    su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D /var/lib/postgresql/data -l /tmp/pg_init.log start"
+    mkdir -p "$PGDATA_DIR"
+    chown -R postgres:postgres "$PGDATA_DIR"
+    chmod 700 "$PGDATA_DIR"
+    
+    su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D $PGDATA_DIR"
+    
+    echo "host all all 127.0.0.1/32 trust" >> "$PGDATA_DIR/pg_hba.conf"
+    
+    su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D $PGDATA_DIR -l /tmp/pg_init.log start"
     sleep 3
     
-    # Create database and run schema
-    su - postgres -c "createdb mimic"
+    su - postgres -c "createdb mimic" || true
     su - postgres -c "psql -d mimic -f /app/backend/schema.sql"
     
-    # Stop PostgreSQL (supervisord will start it)
-    su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D /var/lib/postgresql/data stop"
+    su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D $PGDATA_DIR stop"
     sleep 2
+    
+    echo "[PostgreSQL] Database initialized successfully!"
+else
+    echo "[PostgreSQL] Using existing database at $PGDATA_DIR"
+    chown -R postgres:postgres "$PGDATA_DIR"
 fi
 
-echo "Starting all services via supervisord..."
+chown -R redis:redis "$REDIS_DIR" 2>/dev/null || true
+
+export PGDATA="$PGDATA_DIR"
+
+echo "[Startup] Starting all services via supervisord..."
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

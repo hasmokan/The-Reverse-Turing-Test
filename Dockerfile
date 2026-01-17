@@ -43,10 +43,10 @@ RUN npm run build
 # ============================================
 FROM debian:bookworm-slim AS runtime
 
-# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    postgresql \
+    postgresql-15 \
     redis-server \
+    nginx \
     supervisor \
     nodejs \
     npm \
@@ -71,22 +71,23 @@ COPY backend/schema.sql /app/backend/schema.sql
 
 # Copy configuration files
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY nginx.conf /etc/nginx/nginx.conf
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
-
-# Create PostgreSQL data directory
-RUN mkdir -p /var/lib/postgresql/data && \
-    chown -R postgres:postgres /var/lib/postgresql
 
 # Expose port 7860 (ModelScope requirement)
 EXPOSE 7860
 
-# Environment variables
+# Defaults (can be overridden at runtime)
 ENV DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mimic
 ENV REDIS_URL=redis://localhost:6379
 ENV HOST=0.0.0.0
 ENV PORT=3001
 ENV NODE_ENV=production
+
+# Basic container health check (served by nginx)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -fsS http://localhost:7860/health || exit 1
 
 # Entrypoint
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
