@@ -3,14 +3,13 @@ set -e
 
 PGDATA_DIR="/mnt/workspace/postgresql/data"
 REDIS_DIR="/mnt/workspace/redis"
-N8N_DIR="/mnt/workspace/n8n"
 LOG_DIR="/var/log/supervisor"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$REDIS_DIR"
-mkdir -p "$N8N_DIR"
 mkdir -p "$(dirname $PGDATA_DIR)"
 
+# 初始化 PostgreSQL
 if [ ! -f "$PGDATA_DIR/PG_VERSION" ]; then
     echo "[PostgreSQL] Initializing database at $PGDATA_DIR..."
 
@@ -26,8 +25,7 @@ if [ ! -f "$PGDATA_DIR/PG_VERSION" ]; then
     sleep 3
 
     su - postgres -c "createdb mimic" || true
-    su - postgres -c "createdb n8n" || true
-    su - postgres -c "psql -d mimic -f /app/backend/schema.sql"
+    su - postgres -c "psql -d mimic -f /app/schema.sql"
 
     su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D $PGDATA_DIR stop"
     sleep 2

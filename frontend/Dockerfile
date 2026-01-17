@@ -1,88 +1,55 @@
-# 第一阶段：依赖安装
+# ============================================
+# 谁是卧底 - 前端服务
+# ModelScope Docker 创空间专用
+# ============================================
+
 FROM node:20-alpine AS deps
 
-# 配置 Alpine 国内镜像
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add --no-cache libc6-compat
-
 WORKDIR /app
 
-# 启用 pnpm
 RUN corepack enable pnpm
 
-# 使用官方 npm registry
-RUN pnpm config set registry https://registry.npmjs.org
-
-# 复制包管理文件
 COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
-# 安装依赖（使用 BuildKit 缓存 pnpm store）
-RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-  pnpm i --frozen-lockfile
-
-# 第二阶段：构建
+# 构建阶段
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 启用 pnpm
 RUN corepack enable pnpm
 
-# 复制依赖
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# 构建参数（可在构建时通过 --build-arg 传入）
-ARG NEXT_PUBLIC_VISION_API_URL
-ARG NEXT_PUBLIC_VISION_API_KEY
-ARG NEXT_PUBLIC_VISION_MODEL
-ARG NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_WS_URL
 
-# 设置环境变量用于构建
-ENV NEXT_PUBLIC_VISION_API_URL=${NEXT_PUBLIC_VISION_API_URL}
-ENV NEXT_PUBLIC_VISION_API_KEY=${NEXT_PUBLIC_VISION_API_KEY}
-ENV NEXT_PUBLIC_VISION_MODEL=${NEXT_PUBLIC_VISION_MODEL}
-ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
-# 禁用 Next.js 遥测
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 构建应用
 RUN pnpm run build
 
-# 第三阶段：生产运行
+# 生产运行阶段
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-# 设置生产环境
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 创建非 root 用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
-# 复制构建产物
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# 设置正确的权限
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# 复制 standalone 输出
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# 切换到非 root 用户
 USER nextjs
 
-# 暴露端口
-EXPOSE 3000
-
-# 设置端口环境变量
-ENV PORT=3000
+# ModelScope 要求端口 7860
+EXPOSE 7860
+ENV PORT=7860
 ENV HOSTNAME="0.0.0.0"
 
-# 启动命令
 CMD ["node", "server.js"]
