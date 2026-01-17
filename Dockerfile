@@ -1,7 +1,7 @@
 # ============================================
 # Stage 1: Build Rust Backend
 # ============================================
-FROM rust:1.83-slim-bookworm AS backend-builder
+FROM rust:1.85-slim-bookworm AS backend-builder
 
 WORKDIR /app/backend
 
