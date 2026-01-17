@@ -43,9 +43,9 @@ else
     git remote set-url $MODELSCOPE_REMOTE $MODELSCOPE_URL
 fi
 
-# 推送到魔搭（强制推送，因为 GitHub 是主仓库）
+# 推送到魔搭
 echo "Pushing to ModelScope..."
-git push --force $MODELSCOPE_REMOTE main:master
+git push $MODELSCOPE_REMOTE main:master
 
 echo ""
 echo "Deploy complete!"
