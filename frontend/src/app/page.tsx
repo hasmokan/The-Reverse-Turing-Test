@@ -119,14 +119,14 @@ export default function HomePage() {
 
         <motion.div
           animate={{
-            rotate: 360
+            rotate: -360
           }}
           transition={{ repeat: Infinity, duration: 8, ease: 'linear' }}
           className="mb-3 sm:mb-6 filter drop-shadow-2xl"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/backgrounds/20260118-015657.png"
+            src="/backgrounds/img_v3_02u2_63253af2-6111-449c-9d76-25f617872c0g.png"
             alt="Logo"
             className="w-40 h-40 sm:w-28 sm:h-28 md:w-36 md:h-36 mx-auto object-contain"
           />
@@ -135,9 +135,9 @@ export default function HomePage() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-3xl sm:text-4xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 font-sketch mb-2 sm:mb-4 transform -rotate-1"
+          className="text-5xl sm:text-5xl md:text-7xl font-extrabold text-gray-900 font-crayon mb-2 sm:mb-4 transform -rotate-1 tracking-widest"
           style={{
-            textShadow: '3px 3px 0px rgba(255,182,193,0.5), -2px -2px 0px rgba(135,206,250,0.3)'
+            textShadow: '2px 2px 0px rgba(0,0,0,0.1)'
           }}
         >
           反方向的图灵

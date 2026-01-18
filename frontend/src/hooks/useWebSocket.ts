@@ -179,10 +179,22 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
       // 转换 items 格式
       const items = state.items.map(convertBackendItem)
 
+      // 映射后端 phase 到前端 phase（后端可能返回 'active'，前端使用 'viewing'）
+      const phaseMap: Record<string, 'lobby' | 'drawing' | 'viewing' | 'voting' | 'result' | 'gameover'> = {
+        'lobby': 'lobby',
+        'drawing': 'drawing',
+        'viewing': 'viewing',
+        'voting': 'voting',
+        'result': 'result',
+        'gameover': 'gameover',
+        'active': 'viewing', // 后端的 'active' 映射为前端的 'viewing'
+      }
+      const mappedPhase = phaseMap[state.phase] || 'viewing'
+
       // 更新 store
       setTheme(theme as ThemeConfig)
       setRoomId(state.roomId)
-      setPhase(state.phase as 'lobby' | 'drawing' | 'viewing' | 'voting' | 'result' | 'gameover')
+      setPhase(mappedPhase)
       syncState({
         totalItems: state.totalItems,
         aiCount: state.aiCount,

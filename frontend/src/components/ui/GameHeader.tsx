@@ -68,14 +68,24 @@ export function GameHeader() {
         {/* 物体计数 */}
         <motion.div
           whileHover={{ scale: 1.1, rotate: -3 }}
-          className="flex items-center gap-1 sm:gap-2 bg-gradient-to-br from-blue-100 to-blue-200 px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border-2 border-blue-300 shadow-md hand-drawn-border"
+          className="flex items-center gap-1.5 sm:gap-2 bg-gradient-to-br from-blue-100 to-blue-200 px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border-2 border-blue-300 shadow-md hand-drawn-border whitespace-nowrap"
         >
           <motion.span
-            animate={{ rotate: [0, 15, -15, 0] }}
+            animate={{
+              rotate: [0, 15, -15, 0],
+              scale: [1, 1.05, 1]
+            }}
             transition={{ duration: 2, repeat: Infinity }}
-            className="text-sm sm:text-base"
+            className="text-sm sm:text-base whitespace-nowrap font-extrabold"
           >
-            🎨
+            <motion.span
+              className="sm:hidden text-blue-600"
+              animate={{ opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            >
+              剩余
+            </motion.span>
+            <span className="hidden sm:inline">剩下的鱼</span>
           </motion.span>
           <span className="font-mono font-bold text-blue-700 text-sm sm:text-lg">{totalItems}</span>
         </motion.div>
@@ -88,20 +98,31 @@ export function GameHeader() {
           }}
           transition={{ repeat: Infinity, duration: 0.6 }}
           whileHover={{ scale: 1.15, rotate: 5 }}
-          className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border-2 shadow-md hand-drawn-border ${
-            dangerLevel > 0.8
-              ? 'bg-gradient-to-br from-red-500 to-red-600 text-white border-red-700 animate-danger-pulse'
-              : dangerLevel > 0.5
+          className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border-2 shadow-md hand-drawn-border whitespace-nowrap ${dangerLevel > 0.8
+            ? 'bg-gradient-to-br from-red-500 to-red-600 text-white border-red-700 animate-danger-pulse'
+            : dangerLevel > 0.5
               ? 'bg-gradient-to-br from-orange-100 to-orange-200 text-orange-800 border-orange-400'
               : 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700 border-gray-300'
-          }`}
+            }`}
         >
           <motion.span
-            animate={{ scale: dangerLevel > 0.7 ? [1, 1.2, 1] : 1 }}
-            transition={{ duration: 0.5, repeat: Infinity }}
-            className="text-sm sm:text-base"
+            animate={{
+              scale: dangerLevel > 0.7 ? [1, 1.2, 1] : [1, 1.08, 1]
+            }}
+            transition={{ duration: 0.8, repeat: Infinity }}
+            className="text-sm sm:text-base whitespace-nowrap font-extrabold"
           >
-            🤖
+            <motion.span
+              className="sm:hidden bg-gradient-to-r from-purple-600 to-red-500 bg-clip-text text-transparent"
+              animate={{
+                opacity: [0.8, 1, 0.8],
+                scale: [1, 1.1, 1]
+              }}
+              transition={{ duration: 1, repeat: Infinity }}
+            >
+              AI伪装者
+            </motion.span>
+            <span className="hidden sm:inline">AI伪装者</span>
           </motion.span>
           <span className="font-mono font-bold text-sm sm:text-lg">
             {aiCount}/{maxAI}

@@ -401,9 +401,8 @@ export default function GamePage() {
                 whileTap={!isExporting ? { scale: 0.92, rotate: -2 } : {}}
                 onClick={handleFinishDrawing}
                 disabled={isExporting}
-                className={`absolute bottom-4 right-4 px-8 py-4 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-full font-bold text-lg shadow-2xl hand-drawn-button border-green-600 flex items-center gap-2 ${
-                  isExporting ? 'opacity-80 cursor-not-allowed' : ''
-                }`}
+                className={`absolute bottom-4 right-16 px-8 py-4 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-full font-bold text-lg shadow-2xl hand-drawn-button border-green-600 flex items-center gap-2 ${isExporting ? 'opacity-80 cursor-not-allowed' : ''
+                  }`}
               >
                 {isExporting ? (
                   <>
@@ -456,10 +455,10 @@ export default function GamePage() {
             whileHover={{ scale: 1.05, rotate: -1 }}
             whileTap={{ scale: 0.95, rotate: 1 }}
             onClick={debouncedShowDrawing}
-            className="flex-1 py-5 rainbow-gradient text-white rounded-3xl font-bold text-xl shadow-2xl hand-drawn-button border-pink-500 relative overflow-hidden group"
+            className="flex-1 py-5 bg-gradient-to-r from-red-500 via-rose-500 to-pink-500 text-white rounded-3xl font-bold text-xl shadow-2xl hand-drawn-button border-red-600 relative overflow-hidden group"
           >
-            <span className="relative z-10 flex items-center justify-center gap-2">
-              🎨 画一个！
+            <span className="relative z-10 flex items-center justify-center gap-2 font-extrabold">
+              🎨 先画一条自己的鱼！
             </span>
             {/* 悬停星星效果 */}
             <motion.div

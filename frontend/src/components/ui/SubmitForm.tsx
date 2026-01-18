@@ -29,6 +29,8 @@ const MOCK_DATA = [
 export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: SubmitFormProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [isForceSubmitting, setIsForceSubmitting] = useState(false)
   const theme = useGameStore((state) => state.theme)
   const { status, result, reviewImage, reset } = useImageReview()
 
@@ -51,17 +53,21 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
   }
 
   const handleForceSubmit = () => {
+    if (isForceSubmitting) return
+    setIsForceSubmitting(true)
+    // 不需要重置 loading，因为提交后表单会关闭/卸载
     onSubmit(name.trim(), description.trim())
   }
 
   const handleRetry = () => {
+    if (isRetrying) return
+    setIsRetrying(true)
     reset()
+    onCancel()
   }
 
   // 防抖处理的回调函数
   const debouncedCancel = useDebounceCallback(onCancel, 300)
-  const debouncedRetry = useDebounceCallback(handleRetry, 300)
-  const debouncedForceSubmit = useDebounceCallback(handleForceSubmit, 300)
 
   // 快速填写 mock 数据
   const handleQuickFill = () => {
@@ -193,20 +199,46 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
             className="flex gap-3 mt-6 w-full"
           >
             <motion.button
-              onClick={debouncedRetry}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex-1 py-3 bg-gradient-to-r from-blue-400 to-purple-400 text-white rounded-xl font-bold hand-drawn-button border-purple-500"
+              onClick={handleRetry}
+              whileHover={!isRetrying ? { scale: 1.05 } : {}}
+              whileTap={!isRetrying ? { scale: 0.95 } : {}}
+              disabled={isRetrying}
+              className="flex-1 py-3 bg-gradient-to-r from-blue-400 to-purple-400 text-white rounded-xl font-bold hand-drawn-button border-purple-500 disabled:opacity-70"
             >
-              🎨 重新画
+              {isRetrying ? (
+                <span className="flex items-center justify-center gap-1">
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  >
+                    ⏳
+                  </motion.span>
+                  处理中...
+                </span>
+              ) : (
+                '🎨 重新画'
+              )}
             </motion.button>
             <motion.button
-              onClick={debouncedForceSubmit}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex-1 py-3 bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700 rounded-xl font-bold hand-drawn-button border-gray-500"
+              onClick={handleForceSubmit}
+              whileHover={!isForceSubmitting ? { scale: 1.05 } : {}}
+              whileTap={!isForceSubmitting ? { scale: 0.95 } : {}}
+              disabled={isForceSubmitting}
+              className="flex-1 py-3 bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700 rounded-xl font-bold hand-drawn-button border-gray-500 disabled:opacity-70"
             >
-              😈 我就要！
+              {isForceSubmitting ? (
+                <span className="flex items-center justify-center gap-1">
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  >
+                    ⏳
+                  </motion.span>
+                  提交中...
+                </span>
+              ) : (
+                '😈 我就要！'
+              )}
             </motion.button>
           </motion.div>
         </motion.div>
