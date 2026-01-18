@@ -41,11 +41,6 @@ export async function reviewImageWithMiniMax(
   // 构建提示词
   const prompt = buildReviewPrompt(themeName, themeKeywords)
 
-  console.log('[StepVision] 开始审核图片...')
-  console.log('[StepVision] API URL:', VISION_API_URL)
-  console.log('[StepVision] Model:', VISION_MODEL)
-  console.log('[StepVision] 主题:', themeName)
-  console.log('[StepVision] 关键词:', themeKeywords)
 
   try {
     // 阶跃星辰 API 兼容 OpenAI 格式
@@ -81,7 +76,6 @@ export async function reviewImageWithMiniMax(
       body: JSON.stringify(requestBody),
     })
 
-    console.log('[StepVision] 响应状态:', response.status)
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -90,10 +84,8 @@ export async function reviewImageWithMiniMax(
     }
 
     const data = await response.json()
-    console.log('[StepVision] 响应数据:', JSON.stringify(data, null, 2))
 
     const content = data.choices?.[0]?.message?.content || ''
-    console.log('[StepVision] AI 回复:', content)
 
     // 解析模型响应
     return parseReviewResponse(content, themeKeywords)
@@ -107,12 +99,11 @@ export async function reviewImageWithMiniMax(
  * 构建审核提示词
  */
 function buildReviewPrompt(themeName: string, keywords: string[]): string {
-  const keywordList = keywords.join('、')
 
   return `你是一个专业的简笔画审核助手。请分析这张图片，判断它是否是一幅符合"${themeName}"主题的**丑陋风格简笔画**。
 
 ## 主题要求
-绘制的内容应该是：${keywordList}
+绘制的内容应该是：鱼
 
 ## 简笔画风格规范（这是一种特定的"丑陋简笔画"风格）
 
@@ -154,6 +145,9 @@ function buildReviewPrompt(themeName: string, keywords: string[]): string {
  * 解析模型响应
  */
 function parseReviewResponse(content: string, keywords: string[]): ImageReviewResult {
+  // 防御性检查：确保 keywords 是有效数组
+  const safeKeywords = Array.isArray(keywords) && keywords.length > 0 ? keywords : ['鱼', '海洋生物']
+
   try {
     // 尝试提取 JSON
     const jsonMatch = content.match(/\{[\s\S]*\}/)
@@ -176,7 +170,7 @@ function parseReviewResponse(content: string, keywords: string[]): ImageReviewRe
   const hasPositiveWords = ['符合', '通过', 'valid', 'true', '是的'].some((w) =>
     lowerContent.includes(w)
   )
-  const hasKeyword = keywords.some((k) => lowerContent.includes(k.toLowerCase()))
+  const hasKeyword = safeKeywords.some((k) => lowerContent.includes(k.toLowerCase()))
 
   return {
     isValid: hasPositiveWords || hasKeyword,
@@ -207,7 +201,6 @@ export function mockReviewImage(options: ImageReviewOptions): ImageReviewResult 
 export function hasMinimaxApiKey(): boolean {
   // 优先检查环境变量
   if (VISION_API_KEY && VISION_API_KEY.length > 10) {
-    console.log('[StepVision] Using env API key')
     return true
   }
   // 其次检查 localStorage

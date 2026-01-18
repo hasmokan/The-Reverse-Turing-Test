@@ -78,6 +78,45 @@ export default function HomePage() {
         transition={{ type: 'spring', duration: 0.8 }}
         className="text-center mb-4 sm:mb-8 md:mb-10 relative z-10"
       >
+        {/* 左侧浮动提示词 */}
+        <motion.div
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.8, duration: 0.5 }}
+          className="absolute left-[-120px] top-1/2 -translate-y-1/2 hidden lg:block"
+        >
+          <motion.div
+            animate={{ y: [0, -8, 0], rotate: [-3, 3, -3] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            className="px-3 py-2 bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-300 rounded-lg shadow-md transform -rotate-6"
+          >
+            <span className="text-sm font-bold text-purple-700 whitespace-nowrap">🗳️ 投票驱逐 AI</span>
+          </motion.div>
+          <motion.div
+            animate={{ y: [0, 6, 0], rotate: [2, -2, 2] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+            className="mt-4 px-3 py-2 bg-gradient-to-r from-yellow-100 to-orange-100 border-2 border-yellow-400 rounded-lg shadow-md transform rotate-3"
+          >
+            <span className="text-sm font-bold text-yellow-700 whitespace-nowrap">🕵️ 《找出AI间谍》</span>
+          </motion.div>
+        </motion.div>
+
+        {/* 右侧浮动提示词 */}
+        <motion.div
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.9, duration: 0.5 }}
+          className="absolute right-[-100px] top-1/2 -translate-y-1/2 hidden lg:block"
+        >
+          <motion.div
+            animate={{ y: [0, -6, 0], rotate: [3, -3, 3] }}
+            transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
+            className="px-3 py-2 bg-gradient-to-r from-blue-100 to-cyan-100 border-2 border-blue-400 rounded-lg shadow-md transform rotate-6"
+          >
+            <span className="text-sm font-bold text-blue-700 whitespace-nowrap">🐟 《鱼人杀》</span>
+          </motion.div>
+        </motion.div>
+
         <motion.div
           animate={{
             rotate: 360
@@ -118,25 +157,8 @@ export default function HomePage() {
           className="inline-block px-4 py-1.5 sm:px-6 sm:py-2 bg-yellow-300 border-3 border-yellow-600 rounded-full transform -rotate-2 shadow-lg"
         >
           <p className="text-sm text-yellow-900 font-bold">
-            🎨 画出涂鸦，找出混入的 AI！
+            🎨 通过投票找出 AI 生成的间谍，你也可以涂鸦出属于自己的鱼！
           </p>
-        </motion.div>
-
-        {/* 精简版游戏玩法 */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="flex flex-wrap justify-center gap-2 mt-3"
-        >
-          {['🎨 涂鸦', '🤖 AI混入', '🔍 找出', '🗳️ 投票'].map((item, i) => (
-            <span
-              key={i}
-              className="px-2 py-1 bg-white/70 rounded-full text-xs font-medium text-gray-600 border border-gray-200"
-            >
-              {item}
-            </span>
-          ))}
         </motion.div>
       </motion.div>
 
@@ -147,14 +169,14 @@ export default function HomePage() {
         transition={{ delay: 0.3 }}
         className="w-full max-w-md space-y-5 relative z-10"
       >
-        <motion.h2
+        {/* <motion.h2
           initial={{ x: -20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ delay: 0.5 }}
           className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 text-center mb-6 font-sketch transform -rotate-1"
         >
           🚀 选择主题房间
-        </motion.h2>
+        </motion.h2> */}
 
         {/* 错误提示 */}
         {error && (

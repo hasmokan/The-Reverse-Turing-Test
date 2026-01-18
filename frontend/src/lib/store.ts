@@ -14,6 +14,9 @@ import { generateId, randomRange, calculateTurbidity } from '@/lib/utils'
 import { COOLDOWN_DURATION, MAX_TOAST_COUNT, ELIMINATION_THRESHOLD } from '@/lib/battleConstants'
 
 interface GameStore extends GameState {
+  // 同步状态
+  isSynced: boolean
+
   // 战斗系统状态
   bullet: BulletState
   fishVotes: FishVotes
@@ -28,6 +31,7 @@ interface GameStore extends GameState {
 
   // 原有 Actions
   setPhase: (phase: GamePhase) => void
+  setIsSynced: (synced: boolean) => void
   setRoomId: (roomId: string) => void
   setTheme: (theme: ThemeConfig) => void
   addItem: (item: Omit<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX' | 'comments'> & Partial<Pick<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX' | 'comments'>>) => void
@@ -92,6 +96,7 @@ const initialState: GameState = {
 
 // 战斗系统初始状态
 const initialBattleState = {
+  isSynced: false, // 是否已从后端同步状态
   bullet: {
     loaded: true,
     cooldownEndTime: null,
@@ -113,6 +118,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ...initialBattleState,
 
   setPhase: (phase) => set({ phase }),
+
+  setIsSynced: (synced) => set({ isSynced: synced }),
 
   setRoomId: (roomId) => set({ roomId }),
 

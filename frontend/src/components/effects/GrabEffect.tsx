@@ -60,7 +60,6 @@ export function GrabEffect({ isInsideStage = false }: { isInsideStage?: boolean 
       setIsAnimating(true)
     }, 300)
 
-    console.log('[GrabEffect] Kick animation started for:', eliminationAnimation.fishId)
 
   }, [eliminationAnimation, items, clearEliminationAnimation])
 
@@ -70,7 +69,6 @@ export function GrabEffect({ isInsideStage = false }: { isInsideStage?: boolean 
 
     const { fishId } = animationTargetRef.current
 
-    console.log('[GrabEffect] Animation complete, removing fish:', fishId)
 
     // 移除鱼
     removeItem(fishId)

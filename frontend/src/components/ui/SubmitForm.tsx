@@ -14,6 +14,18 @@ interface SubmitFormProps {
   disabled?: boolean
 }
 
+// Mock 数据列表，用于快速填写
+const MOCK_DATA = [
+  { name: '小蓝鱼', description: '一条爱冒泡的小蓝鱼' },
+  { name: '彩虹鱼', description: '身上有七种颜色的神奇鱼' },
+  { name: '胖墩墩', description: '吃太多变成了球形的鱼' },
+  { name: '闪电侠', description: '游得最快的深海小霸王' },
+  { name: '泡泡龙', description: '会吐彩色泡泡的小龙鱼' },
+  { name: '懒懒', description: '最喜欢躺在珊瑚上晒太阳' },
+  { name: '小星星', description: '眼睛像星星一样闪闪发光' },
+  { name: '咸鱼王', description: '就只是一条普通的咸鱼' },
+]
+
 export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: SubmitFormProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -22,19 +34,13 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('[SubmitForm] handleSubmit called')
-    console.log('[SubmitForm] hasMinimaxApiKey:', hasMinimaxApiKey())
-    console.log('[SubmitForm] name:', name, 'description:', description)
 
     if (!name.trim() || !description.trim()) {
-      console.log('[SubmitForm] Validation failed - name or description empty')
       return
     }
 
-    console.log('[SubmitForm] Starting AI review...')
     // 进行 AI 审核
     const reviewResult = await reviewImage(imageUrl)
-    console.log('[SubmitForm] Review result:', reviewResult)
 
     // 审核通过，延迟后提交
     if (reviewResult.isValid) {
@@ -57,9 +63,16 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
   const debouncedRetry = useDebounceCallback(handleRetry, 300)
   const debouncedForceSubmit = useDebounceCallback(handleForceSubmit, 300)
 
+  // 快速填写 mock 数据
+  const handleQuickFill = () => {
+    const randomIndex = Math.floor(Math.random() * MOCK_DATA.length)
+    const mockItem = MOCK_DATA[randomIndex]
+    setName(mockItem.name)
+    setDescription(mockItem.description)
+  }
+
   // 渲染审核状态覆盖层
   const renderOverlay = () => {
-    console.log('[SubmitForm] renderOverlay status:', status)
 
     if (status === 'reviewing') {
       return (
@@ -306,11 +319,10 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
 
             {/* AI 审核状态指示 */}
             <div
-              className={`absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-bold ${
-                hasMinimaxApiKey()
-                  ? 'bg-green-100 text-green-700 border border-green-300'
-                  : 'bg-yellow-100 text-yellow-700 border border-yellow-300'
-              }`}
+              className={`absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-bold ${hasMinimaxApiKey()
+                ? 'bg-green-100 text-green-700 border border-green-300'
+                : 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                }`}
             >
               {hasMinimaxApiKey() ? '🤖 AI审核' : '⚠️ 未配置'}
             </div>
@@ -324,6 +336,25 @@ export function SubmitForm({ imageUrl, onSubmit, onCancel, disabled = false }: S
             >
               给你的作品起个名字吧！
             </motion.h3>
+
+            {/* 快速填写按钮 */}
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.15 }}
+              className="flex justify-center"
+            >
+              <motion.button
+                type="button"
+                onClick={handleQuickFill}
+                whileHover={{ scale: 1.05, rotate: [0, -3, 3, 0] }}
+                whileTap={{ scale: 0.95 }}
+                disabled={status === 'reviewing'}
+                className="px-4 py-2 bg-gradient-to-r from-yellow-200 to-orange-200 text-orange-700 rounded-full text-sm font-bold border-2 border-orange-300 shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                ⚡ 一键填写（随机名称）
+              </motion.button>
+            </motion.div>
 
             {/* 名称输入 */}
             <motion.div

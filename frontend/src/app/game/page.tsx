@@ -33,6 +33,28 @@ const RANDOM_AUTHOR_NAMES = [
   '小红', '阿华', '小刚', '丽丽', '小芳'
 ]
 
+// 无厘头加载提示（炉石传说风格）
+const LOADING_TIPS = [
+  '全球的鱼正在涌来...',
+  'AI 正在披上伪装...',
+  '正在给鱼缸换水...',
+  '间谍鱼正在学习伪装术...',
+  '正在数鱼的鳞片...',
+  '正在教鱼吐泡泡...',
+  '正在调整水温至最佳摸鱼温度...',
+  '正在给每条鱼取小名...',
+  '正在训练 AI 假装游泳...',
+  '正在往鱼缸里加入神秘海盐...',
+  '正在检查有没有鱼在摸鱼...',
+  '正在让鱼排队入场...',
+  '正在给间谍鱼发工资...',
+  '正在校准鱼的智商检测仪...',
+  '正在用放大镜找可疑的鱼...',
+  '正在播放鱼喜欢的音乐...',
+  '正在给鱼缸里扔面包屑...',
+  '正在统计谁是最可疑的鱼...',
+]
+
 const getRandomAuthorName = () => {
   return RANDOM_AUTHOR_NAMES[Math.floor(Math.random() * RANDOM_AUTHOR_NAMES.length)]
 }
@@ -41,6 +63,7 @@ export default function GamePage() {
   const router = useRouter()
   const phase = useGameStore((state) => state.phase)
   const roomId = useGameStore((state) => state.roomId)
+  const isSynced = useGameStore((state) => state.isSynced)
   const setPhase = useGameStore((state) => state.setPhase)
   const addItem = useGameStore((state) => state.addItem)
   const castVote = useGameStore((state) => state.castVote)
@@ -60,6 +83,22 @@ export default function GamePage() {
   const [submitting, setSubmitting] = useState(false)
   const [sessionId, setSessionId] = useState<string>('')
   const [isExporting, setIsExporting] = useState(false) // 导出图片 loading 状态
+  // 使用固定初始值避免 SSR/CSR hydration 不匹配
+  const [loadingTip, setLoadingTip] = useState(LOADING_TIPS[0]) // 加载提示轮播
+
+  // 加载提示轮播效果
+  useEffect(() => {
+    if (isSynced) return // 同步完成后停止轮播
+
+    // 初始化时立即随机选择一条（客户端）
+    setLoadingTip(LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)])
+
+    const interval = setInterval(() => {
+      setLoadingTip(LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)])
+    }, 2500) // 每 2.5 秒切换一次
+
+    return () => clearInterval(interval)
+  }, [isSynced])
 
   // 初始化 session ID
   useEffect(() => {
@@ -255,6 +294,93 @@ export default function GamePage() {
 
       {/* 顶部状态栏 */}
       <GameHeader />
+
+      {/* 加载进度条 - 首次进入房间同步状态时显示 */}
+      <AnimatePresence>
+        {!isSynced && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40 bg-gradient-to-br from-blue-100/95 via-purple-100/95 to-pink-100/95 backdrop-blur-sm flex flex-col items-center justify-center"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', duration: 0.5 }}
+              className="text-center"
+            >
+              {/* 鱼缸图标 */}
+              <motion.div
+                animate={{
+                  y: [0, -10, 0],
+                  rotate: [-5, 5, -5],
+                }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                className="text-8xl mb-6"
+              >
+                🐠
+              </motion.div>
+
+              {/* 加载文字轮播 */}
+              <AnimatePresence mode="wait">
+                <motion.h2
+                  key={loadingTip}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3 }}
+                  className="text-xl font-bold text-purple-600 font-sketch mb-4 h-8"
+                >
+                  {loadingTip}
+                </motion.h2>
+              </AnimatePresence>
+
+              {/* 进度条 */}
+              <div className="w-64 h-3 bg-white/50 rounded-full overflow-hidden border-2 border-purple-300 shadow-inner">
+                <motion.div
+                  initial={{ width: '0%' }}
+                  animate={{ width: '100%' }}
+                  transition={{ duration: 2, ease: 'easeInOut', repeat: Infinity }}
+                  className="h-full bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 rounded-full"
+                />
+              </div>
+
+              {/* 提示文字 */}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="text-gray-500 text-sm mt-4"
+              >
+                正在同步鱼缸数据，请稍候...
+              </motion.p>
+
+              {/* 装饰气泡 */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                {[...Array(6)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ y: '100%', x: `${15 + i * 15}%`, opacity: 0 }}
+                    animate={{
+                      y: '-100%',
+                      opacity: [0, 0.6, 0],
+                    }}
+                    transition={{
+                      duration: 3 + i * 0.5,
+                      repeat: Infinity,
+                      delay: i * 0.3,
+                      ease: 'easeOut',
+                    }}
+                    className="absolute w-4 h-4 bg-blue-200 rounded-full"
+                    style={{ filter: 'blur(1px)' }}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 主游戏区域 */}
       <div className="flex-1 mt-4 relative">

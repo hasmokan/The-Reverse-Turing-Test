@@ -80,7 +80,6 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
   const vote = useCallback(
     (fishId: string, position?: { x: number; y: number }) => {
       if (!canVote()) {
-        console.log('[Battle] Cannot vote - bullet not loaded')
         return false
       }
 
@@ -97,7 +96,6 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
         emit('vote:cast', { fishId, voterId: playerId })
       }
 
-      console.log('[Battle] Voted for:', fishId)
       return true
     },
     [canVote, fireBullet, addFloatingDamage, emit, playerId]
@@ -109,7 +107,6 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
       const oldTarget = bullet.currentTarget
 
       if (!oldTarget || oldTarget === newFishId) {
-        console.log('[Battle] Cannot switch - no current target or same target')
         return false
       }
 
@@ -127,7 +124,6 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
         emit('vote:cast', { fishId: newFishId, voterId: playerId })
       }
 
-      console.log('[Battle] Switched target from', oldTarget, 'to', newFishId)
       return true
     },
     [bullet.currentTarget, changeTarget, addFloatingDamage, emit, playerId]
@@ -137,7 +133,6 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
   const chase = useCallback(
     (fishId: string) => {
       if (!canChase(fishId)) {
-        console.log('[Battle] Cannot chase - conditions not met')
         return false
       }
 
@@ -149,7 +144,6 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
         emit('vote:chase', { fishId, voterId: playerId })
       }
 
-      console.log('[Battle] Chasing:', fishId)
       return true
     },
     [canChase, chaseFire, emit, playerId]
@@ -253,7 +247,7 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
         case 'chase':
           return '追击！'
         case 'switch':
-          return '换目标'
+          return '投票放逐'
         case 'disabled':
         default:
           return '冷却中...'
