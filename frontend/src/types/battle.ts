@@ -41,6 +41,9 @@ export interface EliminationResult {
   killerNames: string[]
 }
 
+// 战败原因
+export type DefeatReason = 'ai_majority' | 'too_many_human_killed'
+
 // 游戏结果
 export interface GameResult {
   isVictory: boolean
@@ -48,6 +51,8 @@ export interface GameResult {
   mvpPlayerName?: string
   aiRemaining: number
   humanRemaining: number
+  humanKilled?: number
+  reason?: DefeatReason
 }
 
 // 漂浮伤害数字
@@ -129,4 +134,6 @@ export interface GameVictoryData {
 export interface GameDefeatData {
   aiRemaining: number
   humanRemaining: number
+  humanKilled?: number
+  reason?: DefeatReason
 }

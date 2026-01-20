@@ -12,6 +12,11 @@ interface Particle {
   scale: number
   color: string
   delay: number
+  // 预计算的随机值，避免水合错误
+  borderRadius: string
+  xOffset1: number
+  xOffset2: number
+  duration: number
 }
 
 interface ConfettiEffectProps {
@@ -38,6 +43,11 @@ export function ConfettiEffect({ active, onComplete }: ConfettiEffectProps) {
       scale: 0.5 + Math.random() * 0.5,
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
       delay: Math.random() * 0.5,
+      // 预计算随机值，避免渲染时产生水合错误
+      borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+      xOffset1: (Math.random() - 0.5) * 100,
+      xOffset2: (Math.random() - 0.5) * 100,
+      duration: 2 + Math.random() * 2,
     }))
   }, [active])
 
@@ -66,7 +76,7 @@ export function ConfettiEffect({ active, onComplete }: ConfettiEffectProps) {
           style={{
             left: `${particle.x}%`,
             backgroundColor: particle.color,
-            borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+            borderRadius: particle.borderRadius,
           }}
           initial={{
             y: -20,
@@ -76,10 +86,10 @@ export function ConfettiEffect({ active, onComplete }: ConfettiEffectProps) {
           animate={{
             y: '120vh',
             rotate: particle.rotation + 720,
-            x: [0, (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100],
+            x: [0, particle.xOffset1, particle.xOffset2],
           }}
           transition={{
-            duration: 2 + Math.random() * 2,
+            duration: particle.duration,
             delay: particle.delay,
             ease: 'easeIn',
           }}

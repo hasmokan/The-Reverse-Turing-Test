@@ -29,7 +29,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
   const outlineBrushSize = 10 // 勾边模式固定 10px
   const fillBrushSize = 10 // 填色模式固定 10px
   const [brushMode, setBrushMode] = useState<BrushMode>('outline') // 默认勾边模式
-  const [currentColor, setCurrentColor] = useState<string>('#333333') // 勾边默认黑色
+  const [currentColor, setCurrentColor] = useState<string>('#000000') // 勾边默认颜色（黑色）
   const [history, setHistory] = useState<{ fill: ImageData; outline: ImageData }[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [hasOutlineDrawn, setHasOutlineDrawn] = useState(false) // 是否已经画过勾边
@@ -37,20 +37,17 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
 
   const theme = useGameStore((state) => state.theme)
 
-  // 填色调色板：至少8种鲜艳颜色
+  // 填色调色板：5种经典颜色
   const fillPalette = [
-    '#FF6B6B', // 珊瑚红
-    '#FF8C42', // 橙色
-    '#FFEAA7', // 柠檬黄
-    '#96CEB4', // 薄荷绿
-    '#4ECDC4', // 青色
-    '#45B7D1', // 天蓝
-    '#A29BFE', // 薰衣草紫
-    '#FF85A2', // 粉红
+    '#000000', // 黑色
+    '#FF2A2A', // 红色
+    '#1F75FE', // 蓝色
+    '#00CC44', // 绿色
+    '#FF9900', // 橙色
   ]
 
-  // 勾边专用颜色（深色系）
-  const outlineColors = ['#333333', '#1a1a2e', '#4a4e69', '#22223b', '#3d405b']
+  // 勾边专用颜色（黑色）
+  const outlineColors = ['#000000']
 
   // 初始化双层画布
   useEffect(() => {
@@ -273,7 +270,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
     outlineCtx.clearRect(0, 0, outlineCanvas.width, outlineCanvas.height)
     setHasOutlineDrawn(false) // 重置勾边状态
     setBrushMode('outline') // 回到勾边模式
-    setCurrentColor('#333333') // 重置颜色
+    setCurrentColor('#000000') // 重置颜色（黑色）
     saveToHistory()
   }, [saveToHistory])
 
@@ -402,11 +399,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
             }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className={`px-4 py-2 rounded-2xl font-bold text-sm transition-all hand-drawn-button ${
-              brushMode === 'outline'
+            className={`px-4 py-2 rounded-2xl font-bold text-sm transition-all hand-drawn-button ${brushMode === 'outline'
                 ? 'bg-gray-800 text-white border-gray-900 shadow-lg'
                 : 'bg-white border-2 border-gray-300 text-gray-600 hover:border-gray-500'
-            }`}
+              }`}
           >
             ✏️ 勾边
           </motion.button>
@@ -419,13 +415,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
             }}
             whileHover={hasOutlineDrawn ? { scale: 1.05 } : {}}
             whileTap={hasOutlineDrawn ? { scale: 0.95 } : {}}
-            className={`px-4 py-2 rounded-2xl font-bold text-sm transition-all hand-drawn-button relative ${
-              !hasOutlineDrawn
+            className={`px-4 py-2 rounded-2xl font-bold text-sm transition-all hand-drawn-button relative ${!hasOutlineDrawn
                 ? 'bg-gray-100 border-2 border-gray-200 text-gray-400 cursor-not-allowed'
                 : brushMode === 'fill'
                   ? 'bg-gradient-to-br from-pink-500 to-orange-400 text-white border-pink-600 shadow-lg'
                   : 'bg-white border-2 border-gray-300 text-gray-600 hover:border-pink-400'
-            }`}
+              }`}
             title={!hasOutlineDrawn ? '请先用勾边画出轮廓' : ''}
           >
             🎨 填色
@@ -438,7 +433,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
         </div>
 
         {/* 笔刷大小 - 固定 10px */}
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border-2 border-gray-300 shadow-md">
+        {/* <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border-2 border-gray-300 shadow-md">
           <span className="text-xs font-bold text-gray-500">笔刷</span>
           <div
             className="rounded-full"
@@ -449,7 +444,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
             }}
           />
           <span className="text-sm font-bold text-gray-600">10px</span>
-        </div>
+        </div> */}
 
         {/* 撤销/重做/清除 */}
         <div className="flex gap-2">
@@ -539,11 +534,10 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef>(function DrawingCanvas
             whileHover={{ scale: 1.3, rotate: 360, y: -8 }}
             whileTap={{ scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-            className={`${brushMode === 'outline' ? 'w-12 h-12' : 'w-10 h-10'} rounded-full border-4 transition-all relative hand-drawn-button ${
-              currentColor === color
+            className={`${brushMode === 'outline' ? 'w-12 h-12' : 'w-10 h-10'} rounded-full border-4 transition-all relative hand-drawn-button ${currentColor === color
                 ? 'border-gray-800 scale-125 z-10'
                 : 'border-white hover:border-gray-300'
-            }`}
+              }`}
             style={{
               backgroundColor: color,
               boxShadow: currentColor === color

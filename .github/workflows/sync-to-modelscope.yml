@@ -1,0 +1,82 @@
+name: Sync Frontend to ModelScope
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'frontend/**'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  sync-to-modelscope:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Install Git LFS
+        run: |
+          git lfs install
+
+      - name: Clone ModelScope repository
+        run: |
+          git clone http://oauth2:${{ secrets.MODELSCOPE_TOKEN }}@www.modelscope.cn/studios/xiaofenggan/The-Reverse-Turing-Test.git modelscope-repo
+
+      - name: Sync frontend to ModelScope repo
+        run: |
+          # 进入 ModelScope 仓库目录
+          cd modelscope-repo
+
+          # 保留 .git 目录和 ModelScope 特有文件
+          mv .git ../temp-git
+          mv .gitattributes ../temp-gitattributes 2>/dev/null || true
+          mv README.md ../temp-readme 2>/dev/null || true
+
+          # 清空目录
+          rm -rf *
+          rm -rf .[^.]*
+
+          # 恢复 .git 目录
+          mv ../temp-git .git
+          mv ../temp-gitattributes .gitattributes 2>/dev/null || true
+          mv ../temp-readme README.md 2>/dev/null || true
+
+          # 复制 frontend 内容（排除不需要的文件）
+          rsync -av \
+            --exclude='node_modules' \
+            --exclude='.next' \
+            --exclude='.env.local' \
+            --exclude='tsconfig.tsbuildinfo' \
+            --exclude='.turbo' \
+            ../frontend/ ./
+
+          # 检查是否有变更
+          if git diff --quiet && git diff --staged --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          # 提交并推送
+          git add -A
+          git commit -m "sync: update frontend from main repo
+
+          Triggered by: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          Author: ${{ github.actor }}"
+
+          git push origin master
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf modelscope-repo

@@ -139,16 +139,23 @@ export function CooldownHUD() {
       </motion.div>
 
       {/* 状态文字 */}
-      <div className="mt-2 text-center">
+      <motion.div
+        className="mt-1 text-center"
+        animate={bullet.loaded ? { scale: [1, 1.05, 1] } : {}}
+        transition={{ duration: 1, repeat: Infinity }}
+      >
         <span
           className={`
-            text-xs font-medium
-            ${bullet.loaded ? 'text-red-400' : 'text-gray-400'}
+            text-xs font-bold px-3 py-1 rounded-full
+            ${bullet.loaded
+              ? 'text-white bg-red-500 shadow-lg shadow-red-500/50'
+              : 'text-gray-500 bg-gray-200/80'
+            }
           `}
         >
-          {bullet.loaded ? '已装填' : '冷却中'}
+          {bullet.loaded ? '✨ 可继续投票' : '⏳ 冷却中'}
         </span>
-      </div>
+      </motion.div>
     </div>
   )
 }

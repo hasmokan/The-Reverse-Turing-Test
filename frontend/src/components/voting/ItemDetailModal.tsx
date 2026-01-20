@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/lib/store'
 import { GameItem, Comment, WSEventType } from '@/types'
 import { useBattleSystem } from '@/hooks/useBattleSystem'
+import { useDebounceCallback } from '@/hooks/useDebounce'
 import { ELIMINATION_THRESHOLD } from '@/lib/battleConstants'
 
 interface ItemDetailModalProps {
@@ -48,6 +49,39 @@ export function ItemDetailModal({
   // 从 store 获取最新的 item（包含评论）
   const currentItem = items.find((i) => i.id === item?.id) || item
 
+  // 处理战斗操作
+  const handleBattleAction = () => {
+    if (!currentItem) return
+    const actionType = getActionType(currentItem.id)
+    if (actionType === 'disabled') return
+
+    // 获取鱼的位置用于漂浮数字
+    const position = currentItem.position
+
+    if (onBattleAction) {
+      onBattleAction(currentItem.id, position)
+    } else {
+      executeAction(currentItem.id, position)
+    }
+  }
+
+  const handleSubmitComment = () => {
+    if (!currentItem) return
+    if (!commentText.trim() || !authorName.trim()) return
+
+    onComment?.(currentItem.id, {
+      author: authorName.trim(),
+      content: commentText.trim(),
+    })
+
+    setCommentText('')
+  }
+
+  // 防抖处理的回调函数 - 必须在条件返回之前调用
+  const debouncedClose = useDebounceCallback(onClose, 300)
+  const debouncedBattleAction = useDebounceCallback(handleBattleAction, 300)
+  const debouncedSubmitComment = useDebounceCallback(handleSubmitComment, 300)
+
   // 滚动到最新评论
   useEffect(() => {
     if (commentsEndRef.current) {
@@ -55,6 +89,7 @@ export function ItemDetailModal({
     }
   }, [currentItem?.comments?.length])
 
+  // 条件返回必须在所有 hooks 之后
   if (!currentItem) return null
 
   const isVotingPhase = phase === 'voting' || phase === 'viewing' // 支持观看阶段也可以投票
@@ -67,6 +102,11 @@ export function ItemDetailModal({
   const actionType = getActionType(currentItem.id)
   const actionText = getActionText(currentItem.id)
   const isDisabled = actionType === 'disabled'
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp)
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+  }
 
   // 按钮样式根据操作类型
   const getButtonStyles = () => {
@@ -81,36 +121,6 @@ export function ItemDetailModal({
       default:
         return 'bg-gray-400 border-gray-500 cursor-not-allowed'
     }
-  }
-
-  // 处理战斗操作
-  const handleBattleAction = () => {
-    if (isDisabled) return
-
-    // 获取鱼的位置用于漂浮数字
-    const position = currentItem.position
-
-    if (onBattleAction) {
-      onBattleAction(currentItem.id, position)
-    } else {
-      executeAction(currentItem.id, position)
-    }
-  }
-
-  const handleSubmitComment = () => {
-    if (!commentText.trim() || !authorName.trim()) return
-
-    onComment?.(currentItem.id, {
-      author: authorName.trim(),
-      content: commentText.trim(),
-    })
-
-    setCommentText('')
-  }
-
-  const formatTime = (timestamp: number) => {
-    const date = new Date(timestamp)
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
   return (
@@ -144,10 +154,10 @@ export function ItemDetailModal({
 
             {/* 关闭按钮 */}
             <motion.button
-              onClick={onClose}
+              onClick={debouncedClose}
               whileHover={{ scale: 1.15, rotate: 90 }}
               whileTap={{ scale: 0.9 }}
-              className="absolute top-4 right-4 w-10 h-10 bg-gradient-to-br from-red-400 to-pink-400 rounded-full flex items-center justify-center text-white font-bold shadow-lg z-10 hand-drawn-button border-red-500"
+              className="absolute top-4 right-4 w-10 h-10 bg-gradient-to-br from-red-400 to-pink-400 rounded-full flex items-center justify-center text-white font-bold shadow-lg z-30 hand-drawn-button border-red-500"
             >
               ✕
             </motion.button>
@@ -279,7 +289,7 @@ export function ItemDetailModal({
                 <motion.button
                   whileHover={!isDisabled ? { scale: 1.05, rotate: -2 } : {}}
                   whileTap={!isDisabled ? { scale: 0.95, rotate: 2 } : {}}
-                  onClick={handleBattleAction}
+                  onClick={debouncedBattleAction}
                   disabled={isDisabled}
                   className={`w-full py-4 ${getButtonStyles()} text-white rounded-3xl font-bold text-lg shadow-2xl hand-drawn-button relative overflow-hidden transition-all duration-300`}
                 >
@@ -378,7 +388,7 @@ export function ItemDetailModal({
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={handleSubmitComment}
+                    onClick={debouncedSubmitComment}
                     disabled={!commentText.trim() || !authorName.trim()}
                     className="px-4 py-2 bg-gradient-to-r from-green-400 to-teal-400 text-white rounded-xl font-bold shadow-md hand-drawn-button border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

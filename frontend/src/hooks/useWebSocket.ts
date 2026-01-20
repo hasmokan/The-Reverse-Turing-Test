@@ -13,6 +13,7 @@ import {
 } from '@/types/battle'
 import { convertThemeResponse, ThemeResponse } from '@/lib/api'
 import { generateKillToast, generateSelfCaughtToast } from '@/lib/toastMessages'
+import { ENV_CONFIG } from '@/config/env'
 
 interface UseWebSocketOptions {
   url?: string
@@ -132,6 +133,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setTheme,
     setRoomId,
     setPhase,
+    setIsSynced,
     // 战斗系统 actions
     updateFishVotes,
     clearFishVotes,
@@ -140,15 +142,18 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setGameResult,
     triggerElimination,
     playerFishId,
+    addFloatingDamage,
   } = useGameStore()
 
   // 连接 WebSocket
   useEffect(() => {
     if (!enabled || !roomId) return
 
-    const socketUrl = url || process.env.NEXT_PUBLIC_WS_URL || ''
+    // 重置同步状态
+    setIsSynced(false)
 
-    console.log('[WS] Connecting to:', socketUrl, 'Room:', roomId)
+    const socketUrl = url || ENV_CONFIG.WS_URL
+
 
     socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling'],
@@ -161,14 +166,12 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
 
     // 连接成功
     socket.on('connect', () => {
-      console.log('[WS] Connected to server')
       // 加入房间 - 使用后端期望的格式
       socket.emit('room:join', { roomId })
     })
 
     // 同步状态 - 处理后端返回的完整状态
     socket.on('sync:state', (state: SyncStateResponse) => {
-      console.log('[WS] Sync state received:', state)
 
       // 转换主题格式
       const theme = convertThemeResponse(state.theme)
@@ -176,58 +179,66 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
       // 转换 items 格式
       const items = state.items.map(convertBackendItem)
 
+      // 映射后端 phase 到前端 phase（后端可能返回 'active'，前端使用 'viewing'）
+      const phaseMap: Record<string, 'lobby' | 'drawing' | 'viewing' | 'voting' | 'result' | 'gameover'> = {
+        'lobby': 'lobby',
+        'drawing': 'drawing',
+        'viewing': 'viewing',
+        'voting': 'voting',
+        'result': 'result',
+        'gameover': 'gameover',
+        'active': 'viewing', // 后端的 'active' 映射为前端的 'viewing'
+      }
+      const mappedPhase = phaseMap[state.phase] || 'viewing'
+
       // 更新 store
       setTheme(theme as ThemeConfig)
       setRoomId(state.roomId)
-      setPhase(state.phase as 'lobby' | 'drawing' | 'viewing' | 'voting' | 'result' | 'gameover')
+      setPhase(mappedPhase)
       syncState({
         totalItems: state.totalItems,
         aiCount: state.aiCount,
         turbidity: state.turbidity,
         items,
       })
+
+      // 标记同步完成
+      setIsSynced(true)
     })
 
     // 新物品加入
     socket.on('item:add', (item: BackendGameItem) => {
-      console.log('[WS] Item added:', item)
       const converted = convertBackendItem(item)
       addItem(converted)
     })
 
     // 物品移除
     socket.on('item:remove', (data: { itemId: string }) => {
-      console.log('[WS] Item removed:', data.itemId)
       removeItem(data.itemId)
     })
 
     // 开始投票
     socket.on('vote:start', (item: BackendGameItem) => {
-      console.log('[WS] Voting started for:', item)
       startVoting(convertBackendItem(item))
     })
 
     // 投票结束
     socket.on('vote:end', () => {
-      console.log('[WS] Voting ended')
       endVoting()
     })
 
     // 收到投票更新 - 后端格式: { itemId, voteCount }
     socket.on('vote:cast', (data: { itemId: string; voteCount: number }) => {
-      console.log('[WS] Vote update:', data)
       castVote(data.itemId)
     })
 
     // 游戏结束
     socket.on('game:over', () => {
-      console.log('[WS] Game over!')
       setGameOver()
     })
 
     // 收到评论 - 后端格式: { itemId, comment: { author, content } }
     socket.on('comment:add', (data: { itemId: string; comment: { author: string; content: string } }) => {
-      console.log('[WS] Comment added:', data)
       addComment(data.itemId, data.comment)
     })
 
@@ -235,13 +246,24 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
 
     // 票数更新
     socket.on('vote:update', (data: VoteUpdateData) => {
-      console.log('[WS] Vote update:', data)
+
+      // 获取鱼的当前位置，显示 +1 动画
+      const targetFish = useGameStore.getState().items.find(item => item.id === data.fishId)
+      if (targetFish) {
+        // 在鱼的位置显示 +1 漂浮伤害
+        addFloatingDamage(
+          data.fishId,
+          targetFish.position.x,
+          targetFish.position.y,
+          1
+        )
+      }
+
       updateFishVotes(data.fishId, data.count, data.voters)
     })
 
     // 被投票通知（自己的鱼被投票）
     socket.on('vote:received', (data: VoteReceivedData) => {
-      console.log('[WS] Vote received:', data)
       // 检查是否是自己的鱼
       if (data.fishId === playerFishId) {
         setBeingAttacked(true)
@@ -251,7 +273,6 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
 
     // 鱼被淘汰
     socket.on('fish:eliminate', (data: FishEliminateData) => {
-      console.log('[WS] Fish eliminated:', data)
 
       // 触发处决动画
       triggerElimination(data.fishId, data.fishName, data.isAI)
@@ -274,7 +295,6 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
 
     // 游戏胜利
     socket.on('game:victory', (data: GameVictoryData) => {
-      console.log('[WS] Game victory:', data)
       setGameResult({
         isVictory: true,
         mvpPlayerId: data.mvpId,
@@ -286,26 +306,24 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
 
     // 游戏失败
     socket.on('game:defeat', (data: GameDefeatData) => {
-      console.log('[WS] Game defeat:', data)
       setGameResult({
         isVictory: false,
         aiRemaining: data.aiRemaining,
         humanRemaining: data.humanRemaining,
+        humanKilled: data.humanKilled,
+        reason: data.reason,
       })
     })
 
     // 断开连接
     socket.on('disconnect', () => {
-      console.log('[WS] Disconnected from server')
     })
 
     // 连接错误
     socket.on('connect_error', (err) => {
-      console.error('[WS] Connection error:', err)
     })
 
     return () => {
-      console.log('[WS] Leaving room:', roomId)
       socket.emit('room:leave', { roomId })
       socket.disconnect()
     }
@@ -324,6 +342,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setTheme,
     setRoomId,
     setPhase,
+    setIsSynced,
     // 战斗系统
     updateFishVotes,
     clearFishVotes,
@@ -332,15 +351,14 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     setGameResult,
     triggerElimination,
     playerFishId,
+    addFloatingDamage,
   ])
 
   // 发送事件
   const emit = useCallback((event: WSEventType, data?: unknown) => {
     if (socketRef.current?.connected) {
-      console.log('[WS] Emit:', event, data)
       socketRef.current.emit(event, data)
     } else {
-      console.warn('[WS] Not connected, cannot emit:', event)
     }
   }, [])
 
@@ -349,7 +367,6 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
     (item: Omit<GameItem, 'id' | 'position' | 'velocity' | 'rotation' | 'scale' | 'flipX'>) => {
       // 注意: 作品提交应该通过 REST API，不是 WebSocket
       // 后端会在数据库插入后通过 WebSocket 广播
-      console.log('[WS] Item submission should use REST API, not WebSocket')
     },
     []
   )

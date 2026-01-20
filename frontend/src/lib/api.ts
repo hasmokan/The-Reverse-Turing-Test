@@ -3,7 +3,9 @@
  * 对接 Rust 后端 REST API
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
+import { ENV_CONFIG } from '@/config/env'
+
+const API_BASE = ENV_CONFIG.API_URL
 
 // ============ 类型定义 ============
 
@@ -260,14 +262,14 @@ export function convertThemeResponse(theme: ThemeResponse) {
       background_url: theme.backgroundUrl,
       particle_effect: theme.particleEffect,
     },
-    palette: theme.palette,
+    palette: theme.palette || [],
     ai_settings: {
-      keywords: theme.aiKeywords,
-      prompt_style: theme.aiPromptStyle,
+      keywords: theme.aiKeywords || [], // 添加默认空数组，防止 undefined
+      prompt_style: theme.aiPromptStyle || '',
     },
     game_rules: {
-      spawn_rate: theme.spawnRate,
-      max_imposters: theme.maxImposters,
+      spawn_rate: theme.spawnRate ?? 5,
+      max_imposters: theme.maxImposters ?? 5,
     },
   }
 }
