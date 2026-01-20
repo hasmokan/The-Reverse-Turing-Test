@@ -5,10 +5,10 @@
 
 export const ENV_CONFIG = {
   // 后端 API 地址
-  API_URL: 'https://turing.kinaz.me',
+  API_URL: 'https://api.hasmodream.ccwu.cc',
 
   // WebSocket 地址
-  WS_URL: 'wss://turing.kinaz.me',
+  WS_URL: 'wss://api.hasmodream.ccwu.cc',
 
   // 视觉模型 API 配置（阶跃星辰）
   VISION_API_URL: 'https://api.stepfun.com/v1',
