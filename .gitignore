@@ -51,3 +51,9 @@ yarn-error.log*
 # Docker volumes (local dev)
 postgres_data/
 redis_data/
+
+# Backups (do not commit to version control)
+backups/
+
+# Test files (local only)
+backend/test2/

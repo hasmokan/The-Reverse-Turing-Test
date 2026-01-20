@@ -119,27 +119,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setTheme: (theme) => set({ theme }),
 
   addItem: (itemData) => {
-    // 随机选择向左或向右游动
-    const direction = Math.random() > 0.5 ? 1 : -1
-    const newItem: GameItem = {
-      ...itemData,
-      // 保留后端传入的 ID，仅在没有 ID 时才生成新的
-      id: itemData.id || generateId(),
-      position: itemData.position || {
-        x: randomRange(80, 320),
-        y: randomRange(80, 400),
-      },
-      velocity: itemData.velocity || {
-        vx: direction * randomRange(0.8, 1.5), // 主要水平移动
-        vy: randomRange(-0.2, 0.2), // 轻微垂直移动
-      },
-      rotation: itemData.rotation ?? randomRange(-5, 5),
-      scale: itemData.scale ?? randomRange(0.8, 1.2),
-      flipX: itemData.flipX ?? direction < 0, // 根据移动方向决定朝向
-      comments: itemData.comments || [], // 初始化空评论列表
-    }
-
     set((state) => {
+      // 去重检查：如果已存在相同 ID 的 item，跳过添加
+      if (itemData.id && state.items.some((i) => i.id === itemData.id)) {
+        console.log('[Store] Skipping duplicate item:', itemData.id)
+        return state
+      }
+
+      // 随机选择向左或向右游动
+      const direction = Math.random() > 0.5 ? 1 : -1
+      const newItem: GameItem = {
+        ...itemData,
+        // 保留后端传入的 ID，仅在没有 ID 时才生成新的
+        id: itemData.id || generateId(),
+        position: itemData.position || {
+          x: randomRange(80, 320),
+          y: randomRange(80, 400),
+        },
+        velocity: itemData.velocity || {
+          vx: direction * randomRange(0.8, 1.5), // 主要水平移动
+          vy: randomRange(-0.2, 0.2), // 轻微垂直移动
+        },
+        rotation: itemData.rotation ?? randomRange(-5, 5),
+        scale: itemData.scale ?? randomRange(0.8, 1.2),
+        flipX: itemData.flipX ?? direction < 0, // 根据移动方向决定朝向
+        comments: itemData.comments || [], // 初始化空评论列表
+      }
+
       const newItems = [...state.items, newItem]
       const newAICount = state.aiCount + (itemData.isAI ? 1 : 0)
       const maxAI = state.theme?.game_rules.max_imposters || 5
@@ -247,7 +253,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   syncState: (newState) => {
-    set((state) => ({ ...state, ...newState }))
+    set((state) => {
+      // 如果 newState 包含 items，进行智能合并而非直接覆盖
+      // 这样可以防止 sync:state 覆盖 item:add 添加的新 item
+      if (newState.items) {
+        // 使用 Map 合并，优先保留本地已有的 item（可能有更新的状态）
+        const itemMap = new Map<string, GameItem>()
+        // 先添加后端传来的 items
+        newState.items.forEach((i) => itemMap.set(i.id, i))
+        // 再添加本地已有的 items（覆盖后端的，因为本地可能有更新的位置等）
+        state.items.forEach((i) => itemMap.set(i.id, i))
+        const mergedItems = Array.from(itemMap.values())
+        
+        return { 
+          ...state, 
+          ...newState, 
+          items: mergedItems,
+          totalItems: mergedItems.length,
+        }
+      }
+      return { ...state, ...newState }
+    })
   },
 
   // ==================== 战斗系统 Actions ====================

@@ -4,24 +4,35 @@ services:
     container_name: mimic-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD must be set in .env file}"
       POSTGRES_DB: mimic
-    ports:
-      - "5432:5432"
+    # 安全加固: 不暴露端口到主机，只允许内部网络访问
+    # ports:
+    #   - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    shm_size: 256mb
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c max_connections=100
+      -c listen_addresses='*'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - mimic-internal
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     container_name: mimic-redis
-    ports:
-      - "6379:6379"
+    # 安全加固: 不暴露端口到主机
+    # ports:
+    #   - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -29,6 +40,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - mimic-internal
+    restart: unless-stopped
 
   backend:
     build:
@@ -38,7 +52,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mimic
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/mimic"
       REDIS_URL: redis://redis:6379
       HOST: 0.0.0.0
       PORT: "3001"
@@ -53,6 +67,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - mimic-internal
+    restart: unless-stopped
 
   n8n:
     image: n8nio/n8n:latest
@@ -73,6 +90,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - mimic-internal
+    restart: unless-stopped
+
+networks:
+  mimic-internal:
+    driver: bridge
 
 volumes:
   postgres_data:

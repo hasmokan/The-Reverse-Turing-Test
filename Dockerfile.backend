@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y \
     libssl3 \
     ca-certificates \
     curl \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -38,6 +39,10 @@ COPY --from=builder /app/target/release/mimic-backend /app/mimic-backend
 # Copy schema for reference (optional)
 COPY backend/schema.sql /app/schema.sql
 
+# Copy entrypoint script
+COPY backend/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE 3001
 
-CMD ["/app/mimic-backend"]
+CMD ["/app/entrypoint.sh"]

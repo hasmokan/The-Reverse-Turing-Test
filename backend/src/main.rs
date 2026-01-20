@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::{
     routing::{get, post},
-    Router,
+    Extension, Router,
 };
 use socketioxide::SocketIo;
 use sqlx::postgres::PgPoolOptions;
@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
         // 健康检查
         .route("/health", get(|| async { "OK" }))
         // REST API
-        .nest("/api", api_routes(state.clone()))
+        .nest("/api", api_routes(state.clone(), io.clone()))
         // 中间件层
         .layer(cors)
         .layer(TraceLayer::new_for_http())
@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn api_routes(state: Arc<AppState>) -> Router {
+fn api_routes(state: Arc<AppState>, io: SocketIo) -> Router {
     Router::new()
         // Themes
         .route("/themes", get(routes::themes::list_themes))
@@ -123,4 +123,5 @@ fn api_routes(state: Arc<AppState>) -> Router {
         // n8n callback
         .route("/n8n/callback", post(routes::n8n_callback::callback))
         .with_state(state)
+        .layer(Extension(io))
 }

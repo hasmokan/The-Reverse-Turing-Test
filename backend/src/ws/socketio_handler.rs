@@ -265,24 +265,172 @@ async fn on_vote_retract(
     }
 }
 
-/// 追击 (重复投同目标，只重置CD)
+/// 追击 (重复投同目标，增加票数)
 async fn on_vote_chase(
     socket: SocketRef,
     Data(data): Data<BattleVoteCastData>,
-    _state: SioState<Arc<AppState>>,
+    state: SioState<Arc<AppState>>,
 ) {
     info!("[Socket.IO] Vote chase: {:?}", data);
-    // 追击不增加票数，仅记录日志
-    // 前端已处理 CD 重置
+
+    // 解析 fish_id (必须是 UUID 格式，非 UUID 静默忽略)
+    let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
+        Ok(id) => id,
+        Err(_) => {
+            info!("[Socket.IO] Vote chase: invalid UUID format, ignoring");
+            return;
+        }
+    };
+
+    // 获取 drawing (必须存在且未被淘汰)
+    let drawing = match sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
+        .bind(fish_id)
+        .fetch_optional(&state.db)
+        .await
+    {
+        Ok(Some(d)) if !d.is_eliminated => d,
+        Ok(Some(_)) => {
+            info!("[Socket.IO] Vote chase: drawing already eliminated");
+            return;
+        }
+        Ok(None) => {
+            info!("[Socket.IO] Vote chase: drawing not found");
+            return;
+        }
+        Err(e) => {
+            info!("[Socket.IO] Vote chase: db error: {}", e);
+            return;
+        }
+    };
+
+    // 获取 room
+    let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+        .bind(drawing.room_id)
+        .fetch_one(&state.db)
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            info!("[Socket.IO] Vote chase: room not found: {}", e);
+            return;
+        }
+    };
+
+    // 增加票数 (不插入投票记录，与 vote:cast 的区别)
+    let new_count: i32 = match sqlx::query_scalar(
+        "UPDATE drawings SET vote_count = vote_count + 1, updated_at = NOW() WHERE id = $1 RETURNING vote_count"
+    )
+    .bind(fish_id)
+    .fetch_one(&state.db)
+    .await {
+        Ok(c) => c,
+        Err(e) => {
+            info!("[Socket.IO] Vote chase: update failed: {}", e);
+            return;
+        }
+    };
+
+    // 获取投票者列表
+    let voters: Vec<String> =
+        sqlx::query_scalar("SELECT session_id FROM votes WHERE drawing_id = $1")
+            .bind(fish_id)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
+
+    // 广播 vote:update (不是 vote:chase)
+    let vote_update = serde_json::json!({
+        "fishId": data.fish_id,
+        "count": new_count,
+        "voters": voters
+    });
+    let _ = socket
+        .within(room.room_code.clone())
+        .emit("vote:update", &vote_update);
+
+    info!("[Socket.IO] Vote chase: updated count to {} for fish {}", new_count, data.fish_id);
+
+    // 检查处决阈值 (4票)
+    const ELIMINATION_THRESHOLD: i32 = 4;
+    if new_count >= ELIMINATION_THRESHOLD {
+        // 标记为淘汰
+        let _ = sqlx::query(
+            "UPDATE drawings SET is_eliminated = TRUE, eliminated_at = NOW() WHERE id = $1",
+        )
+        .bind(fish_id)
+        .execute(&state.db)
+        .await;
+
+        // 广播 fish:eliminate
+        let eliminate_data = serde_json::json!({
+            "fishId": data.fish_id,
+            "fishName": drawing.name,
+            "isAI": drawing.is_ai,
+            "fishOwnerId": drawing.session_id.unwrap_or_default(),
+            "killerNames": voters
+        });
+        let _ = socket
+            .within(room.room_code.clone())
+            .emit("fish:eliminate", &eliminate_data);
+
+        info!("[Socket.IO] Vote chase: fish {} eliminated (isAI: {})", data.fish_id, drawing.is_ai);
+
+        // 更新 AI 计数
+        if drawing.is_ai {
+            let _ = sqlx::query("UPDATE rooms SET ai_count = ai_count - 1 WHERE id = $1")
+                .bind(room.id)
+                .execute(&state.db)
+                .await;
+        }
+
+        // 检查游戏结束条件
+        check_game_end(&socket, &state, &room).await;
+    }
 }
 
 /// 检查游戏结束条件
+/// 
+/// 游戏结束条件:
+/// 1. 前置检查: total_items <= 5 时不检查（还没有 AI 鱼出现）
+/// 2. 失败条件: 杀了 3 条非 AI 鱼
+/// 3. 失败条件: AI 鱼数量 > 5
+/// 4. 胜利条件: AI 全灭 + 人类 >= 5
 async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
-    // 获取存活统计
-    let stats: Option<(i64, i64)> = sqlx::query_as(
+    // 重新查询最新的 room 数据以获取准确的 total_items
+    let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+        .bind(room.id)
+        .fetch_one(&state.db)
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    
+    // ============ 前置检查 ============
+    // 如果总鱼数 <= 5，不允许游戏结束（还没有 AI 鱼）
+    const MIN_ITEMS_FOR_GAME_END: i32 = 6; // 5 条人类鱼 + 至少 1 条 AI 鱼
+    if room.total_items < MIN_ITEMS_FOR_GAME_END {
+        tracing::info!(
+            "[Game] End check skipped: total_items={} < {}",
+            room.total_items, MIN_ITEMS_FOR_GAME_END
+        );
+        return;
+    }
+
+    // ============ 获取统计数据 ============
+    // 查询存活和淘汰的鱼数量
+    #[derive(sqlx::FromRow)]
+    struct GameStats {
+        ai_alive: i64,
+        human_alive: i64,
+        human_eliminated: i64,
+    }
+    
+    let stats: Option<GameStats> = sqlx::query_as(
         "SELECT 
             COUNT(*) FILTER (WHERE is_ai = TRUE AND is_eliminated = FALSE) as ai_alive,
-            COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = FALSE) as human_alive
+            COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = FALSE) as human_alive,
+            COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = TRUE) as human_eliminated
          FROM drawings WHERE room_id = $1",
     )
     .bind(room.id)
@@ -291,40 +439,69 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
     .ok()
     .flatten();
 
-    if let Some((ai_alive, human_alive)) = stats {
-        const VICTORY_MIN_HUMAN: i64 = 5;
-        const DEFEAT_AI_COUNT: i64 = 5;
+    let Some(stats) = stats else {
+        return;
+    };
 
-        // 胜利: AI 全灭 + 人类 >= 5
-        if ai_alive == 0 && human_alive >= VICTORY_MIN_HUMAN {
-            let victory_data = serde_json::json!({
-                "mvpId": "",
-                "mvpName": "Unknown",
-                "aiRemaining": ai_alive,
-                "humanRemaining": human_alive
-            });
-            let _ = socket
-                .within(room.room_code.clone())
-                .emit("game:victory", &victory_data);
-            let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
-                .bind(room.id)
-                .execute(&state.db)
-                .await;
-        }
-        // 失败: AI > 5
-        else if ai_alive > DEFEAT_AI_COUNT {
-            let defeat_data = serde_json::json!({
-                "aiRemaining": ai_alive,
-                "humanRemaining": human_alive
-            });
-            let _ = socket
-                .within(room.room_code.clone())
-                .emit("game:defeat", &defeat_data);
-            let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
-                .bind(room.id)
-                .execute(&state.db)
-                .await;
-        }
+    // ============ 失败条件 1: 杀了太多人类鱼 ============
+    const MAX_HUMAN_ELIMINATED: i64 = 3;
+    if stats.human_eliminated >= MAX_HUMAN_ELIMINATED {
+        let defeat_data = serde_json::json!({
+            "reason": "too_many_human_killed",
+            "humanKilled": stats.human_eliminated,
+            "aiRemaining": stats.ai_alive,
+            "humanRemaining": stats.human_alive
+        });
+        let _ = socket
+            .within(room.room_code.clone())
+            .emit("game:defeat", &defeat_data);
+        let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+            .bind(room.id)
+            .execute(&state.db)
+            .await;
+        tracing::info!(
+            "[Game] Defeat: {} humans killed in room {}",
+            stats.human_eliminated, room.room_code
+        );
+        return;
+    }
+
+    // ============ 原有逻辑 ============
+    const VICTORY_MIN_HUMAN: i64 = 5;
+    const DEFEAT_AI_COUNT: i64 = 5;
+
+    // 胜利: AI 全灭 + 人类 >= 5
+    if stats.ai_alive == 0 && stats.human_alive >= VICTORY_MIN_HUMAN {
+        let victory_data = serde_json::json!({
+            "mvpId": "",
+            "mvpName": "Unknown",
+            "aiRemaining": stats.ai_alive,
+            "humanRemaining": stats.human_alive
+        });
+        let _ = socket
+            .within(room.room_code.clone())
+            .emit("game:victory", &victory_data);
+        let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+            .bind(room.id)
+            .execute(&state.db)
+            .await;
+        tracing::info!("[Game] Victory in room {}", room.room_code);
+    }
+    // 失败: AI > 5
+    else if stats.ai_alive > DEFEAT_AI_COUNT {
+        let defeat_data = serde_json::json!({
+            "reason": "ai_overrun",
+            "aiRemaining": stats.ai_alive,
+            "humanRemaining": stats.human_alive
+        });
+        let _ = socket
+            .within(room.room_code.clone())
+            .emit("game:defeat", &defeat_data);
+        let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+            .bind(room.id)
+            .execute(&state.db)
+            .await;
+        tracing::info!("[Game] Defeat: AI overrun in room {}", room.room_code);
     }
 }
 
@@ -461,34 +638,34 @@ struct SyncStateData {
 /// 前端 GameItem 格式
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GameItemData {
-    id: String,
+pub struct GameItemData {
+    pub id: String,
     #[serde(rename = "imageUrl")]
-    image_url: String,
-    name: String,
-    description: String,
-    author: String,
+    pub image_url: String,
+    pub name: String,
+    pub description: String,
+    pub author: String,
     #[serde(rename = "isAI")]
-    is_ai: bool,
-    created_at: i64,
-    position: PositionData,
-    velocity: VelocityData,
-    rotation: f64,
-    scale: f64,
-    flip_x: bool,
-    comments: Vec<()>, // 暂时为空数组
+    pub is_ai: bool,
+    pub created_at: i64,
+    pub position: PositionData,
+    pub velocity: VelocityData,
+    pub rotation: f64,
+    pub scale: f64,
+    pub flip_x: bool,
+    pub comments: Vec<()>, // 暂时为空数组
 }
 
 #[derive(Debug, serde::Serialize)]
-struct PositionData {
-    x: f64,
-    y: f64,
+pub struct PositionData {
+    pub x: f64,
+    pub y: f64,
 }
 
 #[derive(Debug, serde::Serialize)]
-struct VelocityData {
-    vx: f64,
-    vy: f64,
+pub struct VelocityData {
+    pub vx: f64,
+    pub vy: f64,
 }
 
 impl From<Drawing> for GameItemData {

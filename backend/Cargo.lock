@@ -1243,6 +1243,7 @@ dependencies = [
  "deadpool-redis",
  "dotenvy",
  "futures",
+ "once_cell",
  "rand",
  "reqwest",
  "serde",

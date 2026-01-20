@@ -1,8 +1,9 @@
 use axum::{
     extract::{Path, State},
-    Json,
+    Extension, Json,
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use socketioxide::SocketIo;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -10,12 +11,14 @@ use crate::models::{
     CreateDrawingRequest, Drawing, DrawingResponse, ReportRequest, Room, Theme, VoteRequest,
 };
 use crate::services::{ApiError, AppState};
+use crate::ws::GameItemData;
 
 /// POST /api/rooms/:room_code/drawings - 提交绘画
 #[axum::debug_handler]
 pub async fn create_drawing(
     State(state): State<Arc<AppState>>,
     Path(room_code): Path<String>,
+    Extension(io): Extension<SocketIo>,
     Json(req): Json<CreateDrawingRequest>,
 ) -> Result<Json<DrawingResponse>, ApiError> {
     // 验证房间
@@ -76,6 +79,15 @@ pub async fn create_drawing(
     .fetch_one(&state.db)
     .await?;
 
+    // 广播人类玩家的 drawing 给房间所有人
+    // 注意：提交者会收到两次（REST 响应 + Socket.IO 广播），前端需去重
+    let user_item_data: GameItemData = drawing.clone().into();
+    if let Err(e) = io.within(room_code.clone()).emit("item:add", &user_item_data) {
+        tracing::error!("Failed to emit item:add for user drawing: {}", e);
+    } else {
+        tracing::info!("Emitted item:add for user drawing {} to room {}", drawing.id, room_code);
+    }
+
     // 更新房间计数
     let new_total: i32 = sqlx::query_scalar(
         "UPDATE rooms SET total_items = total_items + 1, updated_at = NOW() WHERE id = $1 RETURNING total_items",
@@ -84,8 +96,47 @@ pub async fn create_drawing(
     .fetch_one(&state.db)
     .await?;
 
-    // 检查是否需要触发 AI 生成
+    // 检查是否需要生成 AI 鱼
+    // spawn_rate = 5 表示每 5 条人类画作后生成 1 条 AI 鱼
     if new_total % theme.spawn_rate == 0 {
+        let ai_fish_index = new_total / theme.spawn_rate; // 第几条 AI 鱼 (1, 2, 3...)
+        
+        tracing::info!(
+            "AI fish trigger: total_items={}, ai_fish_index={}",
+            new_total, ai_fish_index
+        );
+        
+        // 尝试生成 AI 鱼的逻辑:
+        // 1. 前 5 条 AI 鱼: 优先从预置池随机选择
+        // 2. 第 6 条开始: 优先从 n8n 队列取，若为空则继续用预置池
+        let ai_drawing = if ai_fish_index <= 5 {
+            // 前 5 条 AI 鱼：从预置池随机选择
+            state.spawn_preset_ai_fish(room.id).await
+        } else {
+            // 第 6 条开始：优先用 n8n 队列
+            if let Some(d) = state.try_spawn_from_n8n_queue(room.id).await {
+                Some(d)
+            } else {
+                // n8n 队列为空，继续用预置池
+                state.spawn_preset_ai_fish(room.id).await
+            }
+        };
+        
+        if let Some(ref ai_drawing) = ai_drawing {
+            tracing::info!("AI fish spawned: {} ({})", ai_drawing.name, ai_drawing.id);
+            
+            // 广播 item:add 事件通知前端
+            let item_data: GameItemData = ai_drawing.clone().into();
+            if let Err(e) = io.within(room_code.clone()).emit("item:add", &item_data) {
+                tracing::error!("Failed to emit item:add for AI fish: {}", e);
+            } else {
+                tracing::info!("Emitted item:add for AI fish {} to room {}", ai_drawing.id, room_code);
+            }
+        } else {
+            tracing::warn!("Failed to spawn AI fish for room {}", room_code);
+        }
+        
+        // 后台继续触发 n8n 生成（填充队列供后续使用）
         state.trigger_ai_generation(room.id, &theme).await;
     }
 

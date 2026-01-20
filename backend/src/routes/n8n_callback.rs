@@ -3,10 +3,13 @@ use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::models::{Drawing, N8nCallbackRequest, Room};
+use crate::models::N8nCallbackRequest;
 use crate::services::{ApiError, AppState};
 
 /// POST /api/n8n/callback - AI 生成完成回调
+/// 
+/// 新逻辑：生成的 AI 鱼加入 Redis 队列，而不是直接创建 drawing
+/// drawing 的创建在 drawings.rs 的 create_drawing 中触发
 #[axum::debug_handler]
 pub async fn callback(
     State(state): State<Arc<AppState>>,
@@ -22,59 +25,27 @@ pub async fn callback(
         .ok_or(ApiError::NotFound("Task not found".to_string()))?;
 
     if req.status == "completed" {
-        // 成功：创建 AI 绘画
+        // 成功：将 AI 鱼数据加入队列
         let image_data = req
             .image_data
             .ok_or(ApiError::BadRequest("Missing image_data".to_string()))?;
         let name = req.name.unwrap_or_else(|| "小东西".to_string());
         let description = req.description;
 
-        // 获取房间
-        let room: Room = sqlx::query_as("SELECT * FROM rooms WHERE id = $1")
-            .bind(task.room_id)
-            .fetch_one(&state.db)
-            .await?;
-
-        // 随机位置 (使用 StdRng 以满足 Send)
-        use rand::{rngs::StdRng, Rng, SeedableRng};
-        let mut rng = StdRng::from_entropy();
-        let position_x: f64 = rng.gen_range(0.2..0.8);
-        let position_y: f64 = rng.gen_range(0.2..0.8);
-        let velocity_x: f64 = rng.gen_range(-0.02..0.02);
-        let velocity_y: f64 = rng.gen_range(-0.02..0.02);
-        let flip_x = rng.gen_bool(0.5);
-
-        let drawing_id = Uuid::new_v4();
-
-        // 创建 AI 绘画
-        let drawing: Drawing = sqlx::query_as(
-            r#"
-            INSERT INTO drawings (
-                id, room_id, is_ai, image_data, name, description, author_name,
-                position_x, position_y, velocity_x, velocity_y, flip_x
-            )
-            VALUES ($1, $2, TRUE, $3, $4, $5, 'AI画家', $6, $7, $8, $9, $10)
-            RETURNING *
-            "#,
-        )
-        .bind(drawing_id)
-        .bind(task.room_id)
-        .bind(&image_data)
-        .bind(&name)
-        .bind(&description)
-        .bind(position_x)
-        .bind(position_y)
-        .bind(velocity_x)
-        .bind(velocity_y)
-        .bind(flip_x)
-        .fetch_one(&state.db)
-        .await?;
+        // 构造鱼数据加入队列
+        let fish_data = serde_json::json!({
+            "image_data": image_data,
+            "name": name,
+            "description": description
+        });
+        
+        // 加入 Redis 队列（供后续使用）
+        state.push_ai_fish_to_queue(task.room_id, &fish_data).await;
 
         // 更新任务状态
         sqlx::query(
-            "UPDATE ai_tasks SET status = 'completed', drawing_id = $1, image_data = $2, generated_name = $3, generated_description = $4, completed_at = $5 WHERE id = $6",
+            "UPDATE ai_tasks SET status = 'completed', image_data = $1, generated_name = $2, generated_description = $3, completed_at = $4 WHERE id = $5",
         )
-        .bind(drawing_id)
         .bind(&image_data)
         .bind(&name)
         .bind(&description)
@@ -83,40 +54,11 @@ pub async fn callback(
         .execute(&state.db)
         .await?;
 
-        // 更新房间 AI 计数
-        let new_ai_count: i32 = sqlx::query_scalar(
-            "UPDATE rooms SET ai_count = ai_count + 1, total_items = total_items + 1, updated_at = NOW() WHERE id = $1 RETURNING ai_count",
-        )
-        .bind(task.room_id)
-        .fetch_one(&state.db)
-        .await?;
-
-        // 更新浑浊度
-        let theme: crate::models::Theme = sqlx::query_as("SELECT * FROM themes WHERE id = $1")
-            .bind(room.theme_id)
-            .fetch_one(&state.db)
-            .await?;
-
-        let turbidity = (new_ai_count as f64) / (theme.max_imposters as f64);
-        sqlx::query("UPDATE rooms SET turbidity = $1 WHERE id = $2")
-            .bind(turbidity.min(1.0))
-            .bind(task.room_id)
-            .execute(&state.db)
-            .await?;
-
-        // 注意: Socket.IO 广播由 socketio_handler 处理
-        // AI 绘画创建后，前端通过 sync:state 事件获取更新
-
-        // 检查是否达到 max_imposters
-        if new_ai_count >= theme.max_imposters {
-            state.trigger_game_over(&room).await?;
-        }
-
-        tracing::info!("AI drawing created: {}", drawing_id);
+        tracing::info!("AI fish added to queue for room {}", task.room_id);
         Ok(Json(CallbackResponse {
             success: true,
-            drawing_id: Some(drawing_id),
-            message: "AI drawing created".to_string(),
+            drawing_id: None, // 不再直接创建 drawing
+            message: "AI fish added to queue".to_string(),
         }))
     } else {
         // 失败：更新任务状态
