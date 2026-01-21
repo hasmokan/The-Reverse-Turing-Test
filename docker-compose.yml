@@ -57,6 +57,8 @@ services:
       HOST: 0.0.0.0
       PORT: "3001"
       N8N_WEBHOOK_URL: http://n8n:5678/webhook/mimic-ai-generate
+      CALLBACK_BASE_URL: http://backend:3001
+      AI_GENERATION_ENABLED: "false"
     depends_on:
       postgres:
         condition: service_healthy

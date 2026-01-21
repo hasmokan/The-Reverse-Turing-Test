@@ -47,6 +47,12 @@ impl AppState {
 
     /// 触发 AI 生成
     pub async fn trigger_ai_generation(&self, room_id: Uuid, theme: &Theme) {
+        // 检查是否启用 AI 生成
+        if !self.config.ai_generation_enabled {
+            tracing::info!("AI generation is disabled, skipping for room {}", room_id);
+            return;
+        }
+
         let task_id = Uuid::new_v4();
 
         // 创建任务记录
@@ -68,8 +74,8 @@ impl AppState {
             serde_json::from_value(theme.ai_keywords.clone()).unwrap_or_default();
 
         let callback_url = format!(
-            "http://{}:{}/api/n8n/callback",
-            self.config.host, self.config.port
+            "{}/api/n8n/callback",
+            self.config.callback_base_url
         );
 
         let request = TriggerN8nRequest {

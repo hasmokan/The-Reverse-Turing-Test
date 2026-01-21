@@ -1,5 +1,15 @@
 # n8n 工作流配置指南
 
+## 当前状态
+
+⚠️ **AI 生成功能当前已禁用**
+
+原 Zenmux API 已不可用，系统目前使用预置鱼图片。
+如需启用 AI 生成，请：
+1. 配置新的图像生成 API
+2. 更新 n8n workflow 中的 API endpoint
+3. 设置环境变量 `AI_GENERATION_ENABLED=true`
+
 ## 导入工作流
 
 1. 访问 n8n: http://localhost:5678
@@ -8,14 +18,16 @@
 
 ## 配置 API 凭证
 
-导入后需要配置 Zenmux API 凭证：
+导入后需要配置 AI 图像生成 API 凭证：
 
 1. 点击 **Settings** → **Credentials**
 2. 点击 **Add Credential** → **Bearer Auth**
 3. 配置:
-   - **Name**: `Zenmux API`
-   - **Token**: `sk-ai-v1-e6c5428815770b31e53348538a2a1c0415a09071292199a920c0f2f031871fa6`
+   - **Name**: `AI Image API`
+   - **Token**: `<YOUR_API_TOKEN_HERE>`
 4. 保存
+
+> **注意**: 需要先获取有效的 API Token。请根据选择的 API 提供商获取凭证。
 
 ## 激活工作流
 
@@ -32,5 +44,7 @@ N8N_WEBHOOK_URL=http://localhost:5678/webhook/mimic-ai-generate
 
 如果 n8n 和后端都在 Docker 中，使用：
 ```
-N8N_WEBHOOK_URL=http://mimic-n8n:5678/webhook/mimic-ai-generate
+N8N_WEBHOOK_URL=http://n8n:5678/webhook/mimic-ai-generate
+CALLBACK_BASE_URL=http://backend:3001
+AI_GENERATION_ENABLED=true
 ```

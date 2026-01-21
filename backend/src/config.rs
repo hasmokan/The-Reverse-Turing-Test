@@ -7,6 +7,8 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub n8n_webhook_url: String,
+    pub callback_base_url: String,
+    pub ai_generation_enabled: bool,
 }
 
 impl Config {
@@ -22,6 +24,11 @@ impl Config {
                 .context("PORT must be a valid number")?,
             n8n_webhook_url: std::env::var("N8N_WEBHOOK_URL")
                 .unwrap_or_else(|_| "http://localhost:5678/webhook/mimic-ai-generate".to_string()),
+            callback_base_url: std::env::var("CALLBACK_BASE_URL")
+                .unwrap_or_else(|_| "http://backend:3001".to_string()),
+            ai_generation_enabled: std::env::var("AI_GENERATION_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
         })
     }
 }
