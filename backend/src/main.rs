@@ -124,6 +124,13 @@ fn api_routes(state: Arc<AppState>, io: SocketIo) -> Router {
             "/drawings/:drawing_id/report",
             post(routes::drawings::report_drawing),
         )
+        .route("/game/start", post(routes::game::start_game))
+        .route("/game/catch", post(routes::game::catch_fish))
+        .route("/game/submit", post(routes::game::submit_game))
+        .route(
+            "/game/fish/:fish_instance_id/image",
+            get(routes::game::get_fish_image),
+        )
         // n8n callback
         .route("/n8n/callback", post(routes::n8n_callback::callback))
         .with_state(state)

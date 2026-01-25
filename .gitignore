@@ -50,6 +50,7 @@ yarn-error.log*
 .alma-snapshots/
 
 .agent/
+thoughts/
 
 # Docker volumes (local dev)
 postgres_data/

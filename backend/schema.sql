@@ -105,6 +105,61 @@ CREATE TABLE IF NOT EXISTS ai_tasks (
     completed_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS human_fish (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    image_data TEXT NOT NULL,
+    difficulty_level INT NOT NULL DEFAULT 1,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    weight INT NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_fish (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    image_data TEXT NOT NULL,
+    difficulty_level INT NOT NULL DEFAULT 1,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    weight INT NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS single_player_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id VARCHAR(100) NOT NULL,
+    theme_id UUID REFERENCES themes(id),
+    level INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    max_mistakes INT NOT NULL DEFAULT 3,
+    mistakes INT NOT NULL DEFAULT 0,
+    target_total INT NOT NULL DEFAULT 3,
+    targets_found INT NOT NULL DEFAULT 0,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ends_at TIMESTAMPTZ NOT NULL,
+    submitted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS single_player_run_fish (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id UUID REFERENCES single_player_runs(id) NOT NULL,
+    fish_kind VARCHAR(10) NOT NULL,
+    fish_id UUID NOT NULL,
+    order_index INT NOT NULL,
+    is_caught BOOLEAN NOT NULL DEFAULT FALSE,
+    caught_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS single_player_catches (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id UUID REFERENCES single_player_runs(id) NOT NULL,
+    run_fish_id UUID REFERENCES single_player_run_fish(id) NOT NULL,
+    correct BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_rooms_theme ON rooms(theme_id);
 CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status);
@@ -114,6 +169,11 @@ CREATE INDEX IF NOT EXISTS idx_drawings_room_active ON drawings(room_id)
 CREATE INDEX IF NOT EXISTS idx_votes_drawing ON votes(drawing_id);
 CREATE INDEX IF NOT EXISTS idx_ai_tasks_room ON ai_tasks(room_id);
 CREATE INDEX IF NOT EXISTS idx_ai_tasks_status ON ai_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_human_fish_active_level ON human_fish(is_active, difficulty_level);
+CREATE INDEX IF NOT EXISTS idx_ai_fish_active_level ON ai_fish(is_active, difficulty_level);
+CREATE INDEX IF NOT EXISTS idx_sp_runs_session ON single_player_runs(session_id);
+CREATE INDEX IF NOT EXISTS idx_sp_run_fish_run ON single_player_run_fish(run_id);
+CREATE INDEX IF NOT EXISTS idx_sp_catches_run ON single_player_catches(run_id);
 
 -- 初始主题数据
 INSERT INTO themes (theme_id, theme_name, background_url, particle_effect, palette, ai_keywords, ai_prompt_style, spawn_rate, max_imposters)
@@ -129,3 +189,26 @@ VALUES
      'drawn on a napkin, messy ink, children''s drawing, wobbly lines',
      5, 5)
 ON CONFLICT (theme_id) DO NOTHING;
+
+INSERT INTO human_fish (id, image_data, difficulty_level, metadata, weight, is_active)
+VALUES
+    ('00000000-0000-0000-0000-000000000101', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 1, '{"authorName":"小明","createDate":"2024-05-20","description":"一只蓝色的鱼"}'::jsonb, 3, TRUE),
+    ('00000000-0000-0000-0000-000000000102', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 1, '{"authorName":"阿强","createDate":"2024-06-01","description":"随便画画的小鱼"}'::jsonb, 1, TRUE),
+    ('00000000-0000-0000-0000-000000000103', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 1, '{"authorName":"花花","createDate":"2024-06-10","description":"好难画啊"}'::jsonb, 1, TRUE),
+    ('00000000-0000-0000-0000-000000000201', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 2, '{"authorName":"小红","createDate":"2024-07-01","description":"一条看起来很正常的鱼"}'::jsonb, 2, TRUE),
+    ('00000000-0000-0000-0000-000000000202', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 2, '{"authorName":"大雄","createDate":"2024-07-02","description":"我觉得还行"}'::jsonb, 1, TRUE),
+    ('00000000-0000-0000-0000-000000000203', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 2, '{"authorName":"静香","createDate":"2024-07-03","description":"鱼鱼鱼"}'::jsonb, 1, TRUE),
+    ('00000000-0000-0000-0000-000000000301', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 3, '{"authorName":"老王","createDate":"2024-08-01","description":"画得有点乱但是真的"}'::jsonb, 2, TRUE),
+    ('00000000-0000-0000-0000-000000000302', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 3, '{"authorName":"小李","createDate":"2024-08-02","description":"这是我画的"}'::jsonb, 1, TRUE),
+    ('00000000-0000-0000-0000-000000000303', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 3, '{"authorName":"建国","createDate":"2024-08-03","description":"感觉还不错"}'::jsonb, 1, TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO ai_fish (id, image_data, difficulty_level, metadata, weight, is_active)
+VALUES
+    ('00000000-0000-0000-0000-000000001101', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 1, '{"authorName":"Model_v4","createDate":"1800-01-01","description":"对象:鱼 风格:写实"}'::jsonb, 3, TRUE),
+    ('00000000-0000-0000-0000-000000001102', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 1, '{"authorName":"[AI]","createDate":"0000-00-00","description":"A fish with normal properties"}'::jsonb, 1, TRUE),
+    ('00000000-0000-0000-0000-000000001201', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 2, '{"authorName":"Model_v7","createDate":"2099-12-31","description":"error: cannot resolve fin"}'::jsonb, 2, TRUE),
+    ('00000000-0000-0000-0000-000000001202', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 2, '{"authorName":"Model_v7","createDate":"1970-01-01","description":"对象:鱼; 纹理:NA"}'::jsonb, 1, TRUE),
+    ('00000000-0000-0000-0000-000000001301', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 3, '{"authorName":"Model_v9","createDate":"9999-99-99","description":"### SYSTEM OUTPUT ###"}'::jsonb, 2, TRUE),
+    ('00000000-0000-0000-0000-000000001302', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6XK7xkAAAAASUVORK5CYII=', 3, '{"authorName":"Model_v9","createDate":"1800-01-01","description":"(null)"}'::jsonb, 1, TRUE)
+ON CONFLICT (id) DO NOTHING;

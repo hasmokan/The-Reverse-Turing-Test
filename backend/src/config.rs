@@ -9,6 +9,7 @@ pub struct Config {
     pub n8n_webhook_url: String,
     pub callback_base_url: String,
     pub ai_generation_enabled: bool,
+    pub single_player_allow_duplicates_max_level: i32,
 }
 
 impl Config {
@@ -29,6 +30,12 @@ impl Config {
             ai_generation_enabled: std::env::var("AI_GENERATION_ENABLED")
                 .map(|v| v.to_lowercase() == "true")
                 .unwrap_or(false),
+            single_player_allow_duplicates_max_level: std::env::var(
+                "SINGLE_PLAYER_ALLOW_DUPLICATES_MAX_LEVEL",
+            )
+            .unwrap_or_else(|_| "1".to_string())
+            .parse()
+            .context("SINGLE_PLAYER_ALLOW_DUPLICATES_MAX_LEVEL must be a valid number")?,
         })
     }
 }

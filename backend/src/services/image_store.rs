@@ -20,7 +20,7 @@ pub trait ImageStore: Send + Sync {
 
 pub struct DbDataUrlImageStore;
 
-fn decode_image_data(image_data: &str) -> Result<ImageBytes, ApiError> {
+pub(crate) fn decode_image_data(image_data: &str) -> Result<ImageBytes, ApiError> {
     let (content_type, base64_part) = if let Some(data_url) = image_data.strip_prefix("data:") {
         let comma_idx = data_url
             .find(',')
