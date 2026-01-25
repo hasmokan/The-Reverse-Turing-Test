@@ -7,7 +7,7 @@ use crate::models::N8nCallbackRequest;
 use crate::services::{ApiError, AppState};
 
 /// POST /api/n8n/callback - AI 生成完成回调
-/// 
+///
 /// 新逻辑：生成的 AI 鱼加入 Redis 队列，而不是直接创建 drawing
 /// drawing 的创建在 drawings.rs 的 create_drawing 中触发
 #[axum::debug_handler]
@@ -32,19 +32,8 @@ pub async fn callback(
         let name = req.name.unwrap_or_else(|| "小东西".to_string());
         let description = req.description;
 
-        // 构造鱼数据加入队列
-        let fish_data = serde_json::json!({
-            "image_data": image_data,
-            "name": name,
-            "description": description
-        });
-        
-        // 加入 Redis 队列（供后续使用）
-        state.push_ai_fish_to_queue(task.room_id, &fish_data).await;
-
-        // 更新任务状态
-        sqlx::query(
-            "UPDATE ai_tasks SET status = 'completed', image_data = $1, generated_name = $2, generated_description = $3, completed_at = $4 WHERE id = $5",
+        let result = sqlx::query(
+            "UPDATE ai_tasks SET status = 'completed', image_data = $1, generated_name = $2, generated_description = $3, completed_at = $4 WHERE id = $5 AND status != 'completed'",
         )
         .bind(&image_data)
         .bind(&name)
@@ -53,6 +42,13 @@ pub async fn callback(
         .bind(req.task_id)
         .execute(&state.db)
         .await?;
+
+        if result.rows_affected() == 1 {
+            let fish_data = serde_json::json!({
+                "task_id": req.task_id
+            });
+            state.push_ai_fish_to_queue(task.room_id, &fish_data).await;
+        }
 
         tracing::info!("AI fish added to queue for room {}", task.room_id);
         Ok(Json(CallbackResponse {
@@ -63,7 +59,7 @@ pub async fn callback(
     } else {
         // 失败：更新任务状态
         sqlx::query(
-            "UPDATE ai_tasks SET status = 'failed', error_message = $1, retry_count = retry_count + 1 WHERE id = $2",
+            "UPDATE ai_tasks SET status = 'failed', error_message = $1, retry_count = retry_count + 1 WHERE id = $2 AND status != 'completed'",
         )
         .bind(&req.error_message)
         .bind(req.task_id)

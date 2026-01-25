@@ -6,7 +6,9 @@ use rand::Rng;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::models::{CreateRoomRequest, DrawingListItem, Room, RoomResponse, Theme, ThemeResponse};
+use crate::models::{
+    CreateRoomRequest, DrawingItemRow, DrawingListItem, Room, RoomResponse, Theme, ThemeResponse,
+};
 use crate::services::{ApiError, AppState};
 
 /// POST /api/rooms - 创建房间
@@ -82,10 +84,28 @@ pub async fn list_drawings(
         .await?
         .ok_or(ApiError::NotFound(format!("Room {} not found", room_code)))?;
 
-    // 获取作品列表 (排除 image_data)
-    let drawings: Vec<crate::models::Drawing> = sqlx::query_as(
+    let drawings: Vec<DrawingItemRow> = sqlx::query_as(
         r#"
-        SELECT * FROM drawings 
+        SELECT
+            id,
+            room_id,
+            is_ai,
+            name,
+            description,
+            author_name,
+            position_x,
+            position_y,
+            velocity_x,
+            velocity_y,
+            rotation,
+            scale,
+            flip_x,
+            vote_count,
+            is_eliminated,
+            is_hidden,
+            session_id,
+            created_at
+        FROM drawings
         WHERE room_id = $1 AND is_eliminated = FALSE AND is_hidden = FALSE
         ORDER BY created_at
         "#,

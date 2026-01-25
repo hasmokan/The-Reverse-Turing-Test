@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+pub fn drawing_image_url(drawing_id: Uuid) -> String {
+    format!("/api/drawings/{}/image", drawing_id)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Drawing {
     pub id: Uuid,
@@ -38,6 +42,8 @@ pub struct DrawingListItem {
     pub description: Option<String>,
     #[serde(rename = "author")]
     pub author_name: String,
+    #[serde(rename = "imageUrl")]
+    pub image_url: String,
     pub position: Position,
     pub velocity: Velocity,
     pub rotation: f64,
@@ -62,7 +68,7 @@ pub struct DrawingResponse {
     #[serde(rename = "author")]
     pub author_name: String,
     #[serde(rename = "imageUrl")]
-    pub image_data: String,
+    pub image_url: String,
     pub position: Position,
     pub velocity: Velocity,
     pub rotation: f64,
@@ -96,6 +102,33 @@ impl From<Drawing> for DrawingListItem {
             name: d.name,
             description: d.description.clone(),
             author_name: d.author_name,
+            image_url: drawing_image_url(d.id),
+            position: Position {
+                x: d.position_x,
+                y: d.position_y,
+            },
+            velocity: Velocity {
+                vx: d.velocity_x,
+                vy: d.velocity_y,
+            },
+            rotation: d.rotation,
+            scale: d.scale,
+            flip_x: d.flip_x,
+            vote_count: d.vote_count,
+            is_eliminated: d.is_eliminated,
+            created_at: d.created_at,
+        }
+    }
+}
+
+impl From<crate::models::DrawingItemRow> for DrawingListItem {
+    fn from(d: crate::models::DrawingItemRow) -> Self {
+        Self {
+            id: d.id,
+            name: d.name,
+            description: d.description,
+            author_name: d.author_name,
+            image_url: drawing_image_url(d.id),
             position: Position {
                 x: d.position_x,
                 y: d.position_y,
@@ -121,7 +154,7 @@ impl From<Drawing> for DrawingResponse {
             name: d.name,
             description: d.description.clone(),
             author_name: d.author_name,
-            image_data: d.image_data,
+            image_url: drawing_image_url(d.id),
             position: Position {
                 x: d.position_x,
                 y: d.position_y,

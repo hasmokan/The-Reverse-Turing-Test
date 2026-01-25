@@ -47,6 +47,9 @@ yarn-error.log*
 # IDE
 .vscode/
 .idea/
+.alma-snapshots/
+
+.agent/
 
 # Docker volumes (local dev)
 postgres_data/

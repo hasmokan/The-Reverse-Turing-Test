@@ -1237,8 +1237,10 @@ name = "mimic-backend"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "axum-extra",
+ "base64",
  "chrono",
  "deadpool-redis",
  "dotenvy",

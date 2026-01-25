@@ -3,15 +3,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AiTaskStatus {
-    Pending,
-    Generating,
-    Completed,
-    Failed,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct AiTask {
     pub id: Uuid,

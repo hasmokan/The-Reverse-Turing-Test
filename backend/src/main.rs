@@ -113,6 +113,10 @@ fn api_routes(state: Arc<AppState>, io: SocketIo) -> Router {
         )
         .route("/drawings/:drawing_id", get(routes::drawings::get_drawing))
         .route(
+            "/drawings/:drawing_id/image",
+            get(routes::drawings::get_drawing_image),
+        )
+        .route(
             "/drawings/:drawing_id/vote",
             post(routes::drawings::vote_drawing),
         )

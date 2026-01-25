@@ -3,21 +3,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
-pub enum RoomStatus {
-    Active,
-    Voting,
-    Gameover,
-}
-
-impl Default for RoomStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Room {
     pub id: Uuid,
@@ -35,17 +20,10 @@ pub struct Room {
 }
 
 impl Room {
-    pub fn status_enum(&self) -> RoomStatus {
-        match self.status.as_str() {
-            "voting" => RoomStatus::Voting,
-            "gameover" => RoomStatus::Gameover,
-            _ => RoomStatus::Active,
-        }
-    }
-
     /// 计算动态投票阈值 (在线人数的 30%)
     pub fn vote_threshold(&self) -> i32 {
-        ((self.online_count as f64) * 0.3).ceil() as i32
+        let dynamic = ((self.online_count as f64) * 0.3).ceil() as i32;
+        std::cmp::max(4, dynamic)
     }
 }
 

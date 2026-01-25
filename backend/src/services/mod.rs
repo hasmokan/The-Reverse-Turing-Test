@@ -1,4 +1,5 @@
 pub mod game_logic;
+pub mod image_store;
 pub mod n8n_client;
 pub mod preset_fish;
 pub mod room_manager;
@@ -12,25 +13,27 @@ use deadpool_redis::{redis::AsyncCommands, Pool as RedisPool};
 use rand::{seq::SliceRandom, thread_rng};
 use sqlx::PgPool;
 use std::collections::HashMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::config::Config;
 use crate::models::{Drawing, Room, Theme, TriggerN8nRequest, TriggerN8nTheme};
+use image_store::{DbDataUrlImageStore, ImageStore};
 
 pub use n8n_client::*;
 pub use preset_fish::*;
 
 /// 随机作者名列表（避免 AI 相关字眼）
 const RANDOM_AUTHORS: &[&str] = &[
-    "小明", "阿强", "花花", "大毛", "翠花",
-    "老王", "小李", "阿珍", "铁柱", "建国",
-    "美丽", "胖虎", "小新", "大雄", "静香",
-    "小红", "阿华", "小刚", "丽丽", "小芳",
+    "小明", "阿强", "花花", "大毛", "翠花", "老王", "小李", "阿珍", "铁柱", "建国", "美丽", "胖虎",
+    "小新", "大雄", "静香", "小红", "阿华", "小刚", "丽丽", "小芳",
 ];
 
 /// 获取随机作者名
 fn get_random_author() -> &'static str {
-    RANDOM_AUTHORS.choose(&mut thread_rng()).unwrap_or(&"匿名画家")
+    RANDOM_AUTHORS
+        .choose(&mut thread_rng())
+        .unwrap_or(&"匿名画家")
 }
 
 /// 应用共享状态
@@ -38,11 +41,17 @@ pub struct AppState {
     pub db: PgPool,
     pub redis: RedisPool,
     pub config: Config,
+    pub image_store: Arc<dyn ImageStore>,
 }
 
 impl AppState {
     pub fn new(db: PgPool, redis: RedisPool, config: Config) -> Self {
-        Self { db, redis, config }
+        Self {
+            db,
+            redis,
+            config,
+            image_store: Arc::new(DbDataUrlImageStore),
+        }
     }
 
     /// 触发 AI 生成
@@ -73,10 +82,7 @@ impl AppState {
         let keywords: Vec<String> =
             serde_json::from_value(theme.ai_keywords.clone()).unwrap_or_default();
 
-        let callback_url = format!(
-            "{}/api/n8n/callback",
-            self.config.callback_base_url
-        );
+        let callback_url = format!("{}/api/n8n/callback", self.config.callback_base_url);
 
         let request = TriggerN8nRequest {
             room_id,
@@ -131,18 +137,6 @@ impl AppState {
         Ok(true)
     }
 
-    /// 触发游戏结束
-    pub async fn trigger_game_over(&self, room: &Room) -> Result<(), ApiError> {
-        // 更新房间状态
-        sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
-            .bind(room.id)
-            .execute(&self.db)
-            .await?;
-
-        tracing::info!("Game over in room {}: AI overrun", room.room_code);
-        Ok(())
-    }
-
     // ============ 预置鱼池管理 (Redis 全局统计) ============
 
     /// 获取所有预置鱼的全局使用次数
@@ -152,12 +146,10 @@ impl AppState {
             Ok(mut conn) => {
                 let result: Result<Vec<(String, u32)>, _> = conn.hgetall(key).await;
                 match result {
-                    Ok(pairs) => {
-                        pairs
-                            .into_iter()
-                            .filter_map(|(k, v)| k.parse::<u8>().ok().map(|id| (id, v)))
-                            .collect()
-                    }
+                    Ok(pairs) => pairs
+                        .into_iter()
+                        .filter_map(|(k, v)| k.parse::<u8>().ok().map(|id| (id, v)))
+                        .collect(),
                     Err(e) => {
                         tracing::error!("Redis get_fish_usage_counts error: {}", e);
                         HashMap::new()
@@ -219,19 +211,6 @@ impl AppState {
         }
     }
 
-    /// 清空 n8n 生成队列
-    pub async fn clear_ai_fish_queue(&self, room_id: Uuid) {
-        let key = format!("room:{}:ai_fish_queue", room_id);
-        match self.redis.get().await {
-            Ok(mut conn) => {
-                let _: Result<(), _> = conn.del(&key).await;
-            }
-            Err(e) => {
-                tracing::error!("Redis clear_ai_fish_queue error: {}", e);
-            }
-        }
-    }
-
     // ============ 预置 AI 鱼生成 ============
 
     /// 从预置池生成 AI 鱼（返回 Drawing，需要后续广播）
@@ -239,38 +218,41 @@ impl AppState {
     pub async fn spawn_preset_ai_fish(&self, room_id: Uuid) -> Option<Drawing> {
         // 1. 获取所有预置鱼的全局使用次数
         let usage_counts = self.get_fish_usage_counts().await;
-        
+
         // 2. 找出使用次数最少的值
         let fish_count = preset_fish_count() as u8;
         let min_count = (0..fish_count)
             .map(|id| usage_counts.get(&id).copied().unwrap_or(0))
             .min()
             .unwrap_or(0);
-        
+
         // 3. 筛选出所有使用次数等于最小值的鱼 ID
         let least_used: Vec<u8> = (0..fish_count)
             .filter(|id| usage_counts.get(id).copied().unwrap_or(0) == min_count)
             .collect();
-        
+
         if least_used.is_empty() {
             tracing::warn!("No preset fish available");
             return None;
         }
-        
+
         // 4. 从使用次数最少的鱼中随机选择一条
         let fish_id = {
             let mut rng = thread_rng();
             *least_used.choose(&mut rng)?
         };
-        
+
         let fish = get_preset_fish(fish_id)?;
-        
+
         // 5. 创建 drawing 记录
-        let drawing = self.create_ai_drawing_from_preset(room_id, fish).await.ok()?;
-        
+        let drawing = self
+            .create_ai_drawing_from_preset(room_id, fish)
+            .await
+            .ok()?;
+
         // 6. 递增该鱼的全局使用次数
         self.increment_fish_usage(fish_id).await;
-        
+
         // 7. 更新 room 的 ai_count 和 total_items
         let _ = sqlx::query(
             "UPDATE rooms SET ai_count = ai_count + 1, total_items = total_items + 1, updated_at = NOW() WHERE id = $1"
@@ -278,10 +260,12 @@ impl AppState {
         .bind(room_id)
         .execute(&self.db)
         .await;
-        
+
         tracing::info!(
-            "Preset AI fish {} spawned for room {} (global usage: {})", 
-            fish_id, room_id, min_count + 1
+            "Preset AI fish {} spawned for room {} (global usage: {})",
+            fish_id,
+            room_id,
+            min_count + 1
         );
         Some(drawing)
     }
@@ -293,22 +277,22 @@ impl AppState {
         fish: &PresetFish,
     ) -> Result<Drawing, ApiError> {
         use rand::{rngs::StdRng, Rng, SeedableRng};
-        
+
         let mut rng = StdRng::from_entropy();
         let position_x: f64 = rng.gen_range(0.2..0.8);
         let position_y: f64 = rng.gen_range(0.2..0.8);
         let velocity_x: f64 = rng.gen_range(-0.02..0.02);
         let velocity_y: f64 = rng.gen_range(-0.02..0.02);
         let flip_x = rng.gen_bool(0.5);
-        
+
         let drawing_id = Uuid::new_v4();
-        
+
         // 添加 data:image/png;base64, 前缀
         let image_data = format!("data:image/png;base64,{}", fish.image_base64);
-        
+
         // 随机选择作者名
         let author_name = get_random_author();
-        
+
         let drawing: Drawing = sqlx::query_as(
             r#"
             INSERT INTO drawings (
@@ -332,34 +316,51 @@ impl AppState {
         .bind(flip_x)
         .fetch_one(&self.db)
         .await?;
-        
+
         Ok(drawing)
     }
 
     /// 尝试从 n8n 队列生成 AI 鱼
     pub async fn try_spawn_from_n8n_queue(&self, room_id: Uuid) -> Option<Drawing> {
-        // 从队列取出数据
         let fish_data = self.pop_ai_fish_from_queue(room_id).await?;
-        
-        let image_data = fish_data.get("image_data")?.as_str()?;
-        let name = fish_data.get("name").and_then(|v| v.as_str()).unwrap_or("小东西");
-        let description = fish_data.get("description").and_then(|v| v.as_str());
-        
+        let task_id = fish_data.get("task_id")?.as_str()?;
+        let task_id = Uuid::parse_str(task_id).ok()?;
+
+        #[derive(sqlx::FromRow)]
+        struct AiFishData {
+            image_data: Option<String>,
+            generated_name: Option<String>,
+            generated_description: Option<String>,
+        }
+
+        let task: AiFishData = sqlx::query_as(
+            "SELECT image_data, generated_name, generated_description FROM ai_tasks WHERE id = $1 AND status = 'completed'",
+        )
+        .bind(task_id)
+        .fetch_optional(&self.db)
+        .await
+        .ok()
+        .flatten()?;
+
+        let image_data = task.image_data?;
+        let name = task.generated_name.unwrap_or_else(|| "小东西".to_string());
+        let description = task.generated_description;
+
         // 创建 drawing 记录
         use rand::{rngs::StdRng, Rng, SeedableRng};
-        
+
         let mut rng = StdRng::from_entropy();
         let position_x: f64 = rng.gen_range(0.2..0.8);
         let position_y: f64 = rng.gen_range(0.2..0.8);
         let velocity_x: f64 = rng.gen_range(-0.02..0.02);
         let velocity_y: f64 = rng.gen_range(-0.02..0.02);
         let flip_x = rng.gen_bool(0.5);
-        
+
         let drawing_id = Uuid::new_v4();
-        
+
         // 随机选择作者名
         let author_name = get_random_author();
-        
+
         let drawing: Drawing = sqlx::query_as(
             r#"
             INSERT INTO drawings (
@@ -372,8 +373,8 @@ impl AppState {
         )
         .bind(drawing_id)
         .bind(room_id)
-        .bind(image_data)
-        .bind(name)
+        .bind(&image_data)
+        .bind(&name)
         .bind(&description)
         .bind(author_name)
         .bind(position_x)
@@ -384,7 +385,7 @@ impl AppState {
         .fetch_one(&self.db)
         .await
         .ok()?;
-        
+
         // 更新 room 的 ai_count 和 total_items
         let _ = sqlx::query(
             "UPDATE rooms SET ai_count = ai_count + 1, total_items = total_items + 1, updated_at = NOW() WHERE id = $1"
@@ -392,43 +393,9 @@ impl AppState {
         .bind(room_id)
         .execute(&self.db)
         .await;
-        
+
         tracing::info!("n8n AI fish spawned for room {}", room_id);
         Some(drawing)
-    }
-
-    // ============ 游戏重置 ============
-
-    /// 重置游戏状态（游戏结束后调用）
-    pub async fn reset_game_state(&self, room_id: Uuid) -> Result<(), ApiError> {
-        // 1. 清空 n8n 生成的队列
-        self.clear_ai_fish_queue(room_id).await;
-        
-        // 2. 重置房间计数
-        sqlx::query(
-            "UPDATE rooms SET total_items = 0, ai_count = 0, turbidity = 0, status = 'active', updated_at = NOW() WHERE id = $1"
-        )
-        .bind(room_id)
-        .execute(&self.db)
-        .await?;
-        
-        // 3. 删除所有 drawings
-        sqlx::query("DELETE FROM drawings WHERE room_id = $1")
-            .bind(room_id)
-            .execute(&self.db)
-            .await?;
-        
-        // 4. 删除所有投票记录
-        sqlx::query(
-            "DELETE FROM votes WHERE drawing_id IN (SELECT id FROM drawings WHERE room_id = $1)"
-        )
-        .bind(room_id)
-        .execute(&self.db)
-        .await
-        .ok(); // 忽略错误（可能已经被级联删除）
-        
-        tracing::info!("Game state reset for room {}", room_id);
-        Ok(())
     }
 }
 

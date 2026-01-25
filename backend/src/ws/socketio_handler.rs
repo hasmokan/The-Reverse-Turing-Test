@@ -5,18 +5,17 @@ use socketioxide::extract::{Data, SocketRef, State as SioState};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-use crate::models::{Drawing, Room, Theme, ThemeResponse};
+use crate::models::{drawing_image_url, Drawing, DrawingItemRow, Room, Theme, ThemeResponse};
 use crate::services::AppState;
 
 /// 存储在 socket extensions 中的会话信息
 #[derive(Clone)]
 pub struct RoomSession {
     pub room_code: String,
-    pub session_id: String,
 }
 
 /// Socket.IO 连接处理
-pub fn on_connect(socket: SocketRef, state: SioState<Arc<AppState>>) {
+pub fn on_connect(socket: SocketRef, _state: SioState<Arc<AppState>>) {
     let session_id = socket.id.to_string();
     info!("[Socket.IO] New connection: {}", session_id);
 
@@ -46,7 +45,6 @@ async fn on_room_join(
     // 保存 session 信息到 extensions
     socket.extensions.insert(RoomSession {
         room_code: room_id.clone(),
-        session_id: socket.id.to_string(),
     });
 
     // 更新在线人数
@@ -116,13 +114,30 @@ async fn on_vote_cast(
         Err(_) => return,
     };
 
+    // 插入投票记录
+    let insert_result = match sqlx::query(
+        "INSERT INTO votes (drawing_id, session_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(fish_id)
+    .bind(&data.voter_id)
+    .execute(&state.db)
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    if insert_result.rows_affected() == 0 {
+        return;
+    }
+
     // 更新票数
     let new_count: i32 = match sqlx::query_scalar(
-        "UPDATE drawings SET vote_count = vote_count + 1, updated_at = NOW() WHERE id = $1 RETURNING vote_count"
+        "UPDATE drawings SET vote_count = vote_count + 1, updated_at = NOW() WHERE id = $1 RETURNING vote_count",
     )
     .bind(fish_id)
     .fetch_one(&state.db)
-    .await {
+    .await
+    {
         Ok(c) => c,
         Err(_) => return,
     };
@@ -134,15 +149,6 @@ async fn on_vote_cast(
             .fetch_all(&state.db)
             .await
             .unwrap_or_default();
-
-    // 插入投票记录
-    let _ = sqlx::query(
-        "INSERT INTO votes (drawing_id, session_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-    )
-    .bind(fish_id)
-    .bind(&data.voter_id)
-    .execute(&state.db)
-    .await;
 
     // 广播 vote:update
     let vote_update = serde_json::json!({
@@ -163,9 +169,8 @@ async fn on_vote_cast(
         .within(room.room_code.clone())
         .emit("vote:received", &vote_received);
 
-    // 检查处决阈值 (4票)
-    const ELIMINATION_THRESHOLD: i32 = 4;
-    if new_count >= ELIMINATION_THRESHOLD {
+    let elimination_threshold = room.vote_threshold();
+    if new_count >= elimination_threshold {
         // 标记为淘汰
         let _ = sqlx::query(
             "UPDATE drawings SET is_eliminated = TRUE, eliminated_at = NOW() WHERE id = $1",
@@ -215,23 +220,32 @@ async fn on_vote_retract(
         Err(_) => return,
     };
 
+    // 删除投票记录
+    let delete_result =
+        match sqlx::query("DELETE FROM votes WHERE drawing_id = $1 AND session_id = $2")
+            .bind(fish_id)
+            .bind(&data.voter_id)
+            .execute(&state.db)
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+    if delete_result.rows_affected() == 0 {
+        return;
+    }
+
     // 减少票数
     let new_count: i32 = match sqlx::query_scalar(
-        "UPDATE drawings SET vote_count = GREATEST(vote_count - 1, 0), updated_at = NOW() WHERE id = $1 RETURNING vote_count"
+        "UPDATE drawings SET vote_count = GREATEST(vote_count - 1, 0), updated_at = NOW() WHERE id = $1 RETURNING vote_count",
     )
     .bind(fish_id)
     .fetch_one(&state.db)
-    .await {
+    .await
+    {
         Ok(c) => c,
         Err(_) => return,
     };
-
-    // 删除投票记录
-    let _ = sqlx::query("DELETE FROM votes WHERE drawing_id = $1 AND session_id = $2")
-        .bind(fish_id)
-        .bind(&data.voter_id)
-        .execute(&state.db)
-        .await;
 
     // 获取房间
     if let Ok(drawing) = sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
@@ -348,11 +362,13 @@ async fn on_vote_chase(
         .within(room.room_code.clone())
         .emit("vote:update", &vote_update);
 
-    info!("[Socket.IO] Vote chase: updated count to {} for fish {}", new_count, data.fish_id);
+    info!(
+        "[Socket.IO] Vote chase: updated count to {} for fish {}",
+        new_count, data.fish_id
+    );
 
-    // 检查处决阈值 (4票)
-    const ELIMINATION_THRESHOLD: i32 = 4;
-    if new_count >= ELIMINATION_THRESHOLD {
+    let elimination_threshold = room.vote_threshold();
+    if new_count >= elimination_threshold {
         // 标记为淘汰
         let _ = sqlx::query(
             "UPDATE drawings SET is_eliminated = TRUE, eliminated_at = NOW() WHERE id = $1",
@@ -373,7 +389,10 @@ async fn on_vote_chase(
             .within(room.room_code.clone())
             .emit("fish:eliminate", &eliminate_data);
 
-        info!("[Socket.IO] Vote chase: fish {} eliminated (isAI: {})", data.fish_id, drawing.is_ai);
+        info!(
+            "[Socket.IO] Vote chase: fish {} eliminated (isAI: {})",
+            data.fish_id, drawing.is_ai
+        );
 
         // 更新 AI 计数
         if drawing.is_ai {
@@ -389,7 +408,7 @@ async fn on_vote_chase(
 }
 
 /// 检查游戏结束条件
-/// 
+///
 /// 游戏结束条件:
 /// 1. 前置检查: total_items <= 5 时不检查（还没有 AI 鱼出现）
 /// 2. 失败条件: 杀了 3 条非 AI 鱼
@@ -405,14 +424,15 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
         Ok(r) => r,
         Err(_) => return,
     };
-    
+
     // ============ 前置检查 ============
     // 如果总鱼数 <= 5，不允许游戏结束（还没有 AI 鱼）
     const MIN_ITEMS_FOR_GAME_END: i32 = 6; // 5 条人类鱼 + 至少 1 条 AI 鱼
     if room.total_items < MIN_ITEMS_FOR_GAME_END {
         tracing::info!(
             "[Game] End check skipped: total_items={} < {}",
-            room.total_items, MIN_ITEMS_FOR_GAME_END
+            room.total_items,
+            MIN_ITEMS_FOR_GAME_END
         );
         return;
     }
@@ -425,7 +445,7 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
         human_alive: i64,
         human_eliminated: i64,
     }
-    
+
     let stats: Option<GameStats> = sqlx::query_as(
         "SELECT 
             COUNT(*) FILTER (WHERE is_ai = TRUE AND is_eliminated = FALSE) as ai_alive,
@@ -461,7 +481,8 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
             .await;
         tracing::info!(
             "[Game] Defeat: {} humans killed in room {}",
-            stats.human_eliminated, room.room_code
+            stats.human_eliminated,
+            room.room_code
         );
         return;
     }
@@ -534,12 +555,6 @@ struct RoomLeaveData {
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct VoteCastData {
-    item_id: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct BattleVoteCastData {
     fish_id: String,
     voter_id: String,
@@ -579,9 +594,31 @@ async fn get_room_state(state: &AppState, room_code: &str) -> Result<SyncStateDa
         .map_err(|_| ())?
         .ok_or(())?;
 
-    // 获取作品列表
-    let drawings: Vec<Drawing> = sqlx::query_as(
-        "SELECT * FROM drawings WHERE room_id = $1 AND is_eliminated = FALSE AND is_hidden = FALSE ORDER BY created_at",
+    let drawings: Vec<DrawingItemRow> = sqlx::query_as(
+        r#"
+        SELECT
+            id,
+            room_id,
+            is_ai,
+            name,
+            description,
+            author_name,
+            position_x,
+            position_y,
+            velocity_x,
+            velocity_y,
+            rotation,
+            scale,
+            flip_x,
+            vote_count,
+            is_eliminated,
+            is_hidden,
+            session_id,
+            created_at
+        FROM drawings
+        WHERE room_id = $1 AND is_eliminated = FALSE AND is_hidden = FALSE
+        ORDER BY created_at
+        "#,
     )
     .bind(room.id)
     .fetch_all(&state.db)
@@ -605,19 +642,17 @@ async fn get_room_state(state: &AppState, room_code: &str) -> Result<SyncStateDa
 
 /// 更新在线人数
 async fn update_online_count(state: &AppState, room_code: &str, delta: i32) {
-    if let Ok(room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE room_code = $1")
+    if let Ok(Some(room)) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE room_code = $1")
         .bind(room_code)
         .fetch_optional(&state.db)
         .await
     {
-        if let Some(room) = room {
-            let new_count = (room.online_count + delta).max(0);
-            let _ = sqlx::query("UPDATE rooms SET online_count = $1 WHERE id = $2")
-                .bind(new_count)
-                .bind(room.id)
-                .execute(&state.db)
-                .await;
-        }
+        let new_count = (room.online_count + delta).max(0);
+        let _ = sqlx::query("UPDATE rooms SET online_count = $1 WHERE id = $2")
+            .bind(new_count)
+            .bind(room.id)
+            .execute(&state.db)
+            .await;
     }
 }
 
@@ -672,10 +707,36 @@ impl From<Drawing> for GameItemData {
     fn from(d: Drawing) -> Self {
         Self {
             id: d.id.to_string(),
-            image_url: d.image_data, // 前端用 imageUrl
+            image_url: drawing_image_url(d.id),
             name: d.name,
             description: d.description.unwrap_or_default(),
             author: d.author_name, // 前端用 author
+            is_ai: d.is_ai,
+            created_at: d.created_at.timestamp_millis(),
+            position: PositionData {
+                x: d.position_x,
+                y: d.position_y,
+            },
+            velocity: VelocityData {
+                vx: d.velocity_x,
+                vy: d.velocity_y,
+            },
+            rotation: d.rotation,
+            scale: d.scale,
+            flip_x: d.flip_x,
+            comments: vec![],
+        }
+    }
+}
+
+impl From<DrawingItemRow> for GameItemData {
+    fn from(d: DrawingItemRow) -> Self {
+        Self {
+            id: d.id.to_string(),
+            image_url: drawing_image_url(d.id),
+            name: d.name,
+            description: d.description.unwrap_or_default(),
+            author: d.author_name,
             is_ai: d.is_ai,
             created_at: d.created_at.timestamp_millis(),
             position: PositionData {
