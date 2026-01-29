@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::models::{Drawing, Room, Theme, TriggerN8nRequest, TriggerN8nTheme};
-use image_store::{DbDataUrlImageStore, ImageStore};
+use image_store::{build_image_store, ImageStore};
 
 pub use n8n_client::*;
 pub use preset_fish::*;
@@ -45,13 +45,15 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(db: PgPool, redis: RedisPool, config: Config) -> Self {
-        Self {
+    pub fn new(db: PgPool, redis: RedisPool, config: Config) -> Result<Self, ApiError> {
+        let image_store = build_image_store(&config)?;
+
+        Ok(Self {
             db,
             redis,
             config,
-            image_store: Arc::new(DbDataUrlImageStore),
-        }
+            image_store,
+        })
     }
 
     /// 触发 AI 生成
@@ -287,8 +289,11 @@ impl AppState {
 
         let drawing_id = Uuid::new_v4();
 
-        // 添加 data:image/png;base64, 前缀
         let image_data = format!("data:image/png;base64,{}", fish.image_base64);
+        let image_data = self
+            .image_store
+            .prepare_drawing_image_data(drawing_id, &image_data)
+            .await?;
 
         // 随机选择作者名
         let author_name = get_random_author();
@@ -357,6 +362,11 @@ impl AppState {
         let flip_x = rng.gen_bool(0.5);
 
         let drawing_id = Uuid::new_v4();
+        let image_data = self
+            .image_store
+            .prepare_drawing_image_data(drawing_id, &image_data)
+            .await
+            .ok()?;
 
         // 随机选择作者名
         let author_name = get_random_author();

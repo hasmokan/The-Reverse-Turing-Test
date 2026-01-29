@@ -59,7 +59,10 @@ async fn main() -> Result<()> {
     tracing::info!("Connected to Redis");
 
     // 应用状态
-    let state = Arc::new(AppState::new(pool, redis_pool, config.clone()));
+    let state = Arc::new(
+        AppState::new(pool, redis_pool, config.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to init app state: {:?}", e))?,
+    );
 
     // Socket.IO 设置
     let (sio_layer, io) = SocketIo::builder().with_state(state.clone()).build_layer();

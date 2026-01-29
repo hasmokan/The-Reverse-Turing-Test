@@ -10,10 +10,21 @@ pub struct Config {
     pub callback_base_url: String,
     pub ai_generation_enabled: bool,
     pub single_player_allow_duplicates_max_level: i32,
+    pub image_storage_backend: String,
+    pub s3_root: String,
+    pub s3_bucket: Option<String>,
+    pub s3_region: Option<String>,
+    pub s3_endpoint: Option<String>,
+    pub s3_access_key_id: Option<String>,
+    pub s3_secret_access_key: Option<String>,
 }
 
 impl Config {
     pub fn from_env() -> Result<Self> {
+        let image_storage_backend =
+            std::env::var("IMAGE_STORAGE_BACKEND").unwrap_or_else(|_| "db".to_string());
+        let s3_enabled = image_storage_backend == "s3";
+
         Ok(Self {
             database_url: std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?,
             redis_url: std::env::var("REDIS_URL")
@@ -36,6 +47,36 @@ impl Config {
             .unwrap_or_else(|_| "1".to_string())
             .parse()
             .context("SINGLE_PLAYER_ALLOW_DUPLICATES_MAX_LEVEL must be a valid number")?,
+            image_storage_backend,
+            s3_root: std::env::var("S3_ROOT").unwrap_or_else(|_| "/".to_string()),
+            s3_bucket: if s3_enabled {
+                Some(std::env::var("S3_BUCKET").context("S3_BUCKET must be set")?)
+            } else {
+                None
+            },
+            s3_region: if s3_enabled {
+                Some(std::env::var("S3_REGION").context("S3_REGION must be set")?)
+            } else {
+                None
+            },
+            s3_endpoint: if s3_enabled {
+                Some(std::env::var("S3_ENDPOINT").context("S3_ENDPOINT must be set")?)
+            } else {
+                None
+            },
+            s3_access_key_id: if s3_enabled {
+                Some(std::env::var("S3_ACCESS_KEY_ID").context("S3_ACCESS_KEY_ID must be set")?)
+            } else {
+                None
+            },
+            s3_secret_access_key: if s3_enabled {
+                Some(
+                    std::env::var("S3_SECRET_ACCESS_KEY")
+                        .context("S3_SECRET_ACCESS_KEY must be set")?,
+                )
+            } else {
+                None
+            },
         })
     }
 }

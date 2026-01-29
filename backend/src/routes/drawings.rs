@@ -55,6 +55,11 @@ pub async fn create_drawing(
         req.name.clone()
     };
 
+    let stored_image_data = state
+        .image_store
+        .prepare_drawing_image_data(drawing_id, &req.image_data)
+        .await?;
+
     // 插入绘画
     let drawing: Drawing = sqlx::query_as(
         r#"
@@ -68,7 +73,7 @@ pub async fn create_drawing(
     )
     .bind(drawing_id)
     .bind(room.id)
-    .bind(&req.image_data)
+    .bind(&stored_image_data)
     .bind(&name)
     .bind(&req.description)
     .bind(&req.author_name)
