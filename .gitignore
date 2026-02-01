@@ -65,3 +65,4 @@ backups/
 
 # Test files (local only)
 backend/test2/
+backend/ARCHITECTURE.md
