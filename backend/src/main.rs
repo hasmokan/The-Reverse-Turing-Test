@@ -127,6 +127,9 @@ fn api_routes(state: Arc<AppState>, io: SocketIo) -> Router {
             "/drawings/:drawing_id/report",
             post(routes::drawings::report_drawing),
         )
+        .route("/auth/wechat_mp/login", post(routes::auth::wechat_mp_login))
+        .route("/auth/me", get(routes::auth::me))
+        .route("/auth/logout", post(routes::auth::logout))
         .route("/game/start", post(routes::game::start_game))
         .route("/game/catch", post(routes::game::catch_fish))
         .route("/game/submit", post(routes::game::submit_game))

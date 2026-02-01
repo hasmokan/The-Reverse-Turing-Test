@@ -160,6 +160,40 @@ CREATE TABLE IF NOT EXISTS single_player_catches (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 账号体系（预留网站 + 小程序）
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS auth_identities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) NOT NULL,
+    provider VARCHAR(50) NOT NULL,
+    appid VARCHAR(64),
+    openid VARCHAR(128),
+    unionid VARCHAR(128),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(provider, appid, openid)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_identities_unionid_unique
+    ON auth_identities(provider, unionid)
+    WHERE unionid IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token VARCHAR(128) PRIMARY KEY,
+    user_id UUID REFERENCES users(id) NOT NULL,
+    legacy_session_id VARCHAR(100),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_rooms_theme ON rooms(theme_id);
 CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status);

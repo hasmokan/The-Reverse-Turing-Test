@@ -17,6 +17,9 @@ pub struct Config {
     pub s3_endpoint: Option<String>,
     pub s3_access_key_id: Option<String>,
     pub s3_secret_access_key: Option<String>,
+    pub wechat_mp_appid: Option<String>,
+    pub wechat_mp_secret: Option<String>,
+    pub auth_token_ttl_days: i64,
 }
 
 impl Config {
@@ -24,6 +27,9 @@ impl Config {
         let image_storage_backend =
             std::env::var("IMAGE_STORAGE_BACKEND").unwrap_or_else(|_| "db".to_string());
         let s3_enabled = image_storage_backend == "s3";
+        let wechat_enabled = std::env::var("WECHAT_MP_ENABLED")
+            .map(|v| v.to_lowercase() == "true")
+            .unwrap_or(false);
 
         Ok(Self {
             database_url: std::env::var("DATABASE_URL").context("DATABASE_URL must be set")?,
@@ -77,6 +83,20 @@ impl Config {
             } else {
                 None
             },
+            wechat_mp_appid: if wechat_enabled {
+                Some(std::env::var("WECHAT_MP_APPID").context("WECHAT_MP_APPID must be set")?)
+            } else {
+                None
+            },
+            wechat_mp_secret: if wechat_enabled {
+                Some(std::env::var("WECHAT_MP_SECRET").context("WECHAT_MP_SECRET must be set")?)
+            } else {
+                None
+            },
+            auth_token_ttl_days: std::env::var("AUTH_TOKEN_TTL_DAYS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .context("AUTH_TOKEN_TTL_DAYS must be a valid number")?,
         })
     }
 }
