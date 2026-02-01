@@ -20,6 +20,7 @@ pub struct Config {
     pub wechat_mp_appid: Option<String>,
     pub wechat_mp_secret: Option<String>,
     pub auth_token_ttl_days: i64,
+    pub dev_auth_enabled: bool,
 }
 
 impl Config {
@@ -97,6 +98,9 @@ impl Config {
                 .unwrap_or_else(|_| "30".to_string())
                 .parse()
                 .context("AUTH_TOKEN_TTL_DAYS must be a valid number")?,
+            dev_auth_enabled: std::env::var("DEV_AUTH_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false),
         })
     }
 }

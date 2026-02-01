@@ -26,6 +26,9 @@ debug
 .env
 .env.local
 .env*.local
+.env.dev
+.env.test
+.env.verify
 **/.env
 
 # Node.js (frontend)
@@ -48,6 +51,7 @@ yarn-error.log*
 .vscode/
 .idea/
 .alma-snapshots/
+.trae/
 
 .agent/
 thoughts/

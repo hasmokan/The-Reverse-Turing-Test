@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod dev_auth;
 pub mod drawings;
 pub mod game;
 pub mod n8n_callback;

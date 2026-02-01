@@ -59,6 +59,9 @@ services:
       N8N_WEBHOOK_URL: http://n8n:5678/webhook/mimic-ai-generate
       CALLBACK_BASE_URL: http://backend:3001
       AI_GENERATION_ENABLED: "false"
+      DEV_AUTH_ENABLED: "${DEV_AUTH_ENABLED:-false}"
+      WECHAT_MP_ENABLED: "${WECHAT_MP_ENABLED:-false}"
+      AUTH_TOKEN_TTL_DAYS: "${AUTH_TOKEN_TTL_DAYS:-30}"
     depends_on:
       postgres:
         condition: service_healthy

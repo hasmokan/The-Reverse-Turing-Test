@@ -9,6 +9,7 @@ use crate::models::AuthIdentity;
 use crate::services::ApiError;
 
 pub const PROVIDER_WECHAT_MINIPROGRAM: &str = "wechat_miniprogram";
+pub const PROVIDER_DEV: &str = "dev";
 
 pub struct LoginResult {
     pub token: String,
@@ -158,6 +159,83 @@ pub async fn login_wechat_miniprogram(
         .bind(appid)
         .bind(&session.openid)
         .bind(&session.unionid)
+        .execute(&mut *tx)
+        .await?;
+
+        (user_id, true)
+    };
+
+    let token = generate_token();
+    let expires_at = Utc::now() + Duration::days(config.auth_token_ttl_days);
+
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO auth_sessions (token, user_id, legacy_session_id, expires_at)
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind(&token)
+    .bind(user_id)
+    .bind(legacy_session_id)
+    .bind(expires_at)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(LoginResult {
+        token,
+        user_id,
+        is_new_user,
+    })
+}
+
+pub async fn login_dev(
+    db: &PgPool,
+    config: &Config,
+    legacy_session_id: Option<&str>,
+) -> Result<LoginResult, ApiError> {
+    if !config.dev_auth_enabled {
+        return Err(ApiError::NotFound("Not found".to_string()));
+    }
+
+    let appid = "local";
+    let openid = legacy_session_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("dev:{}", Uuid::new_v4()));
+
+    let mut tx = db.begin().await?;
+
+    let existing_user_id: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT user_id
+        FROM auth_identities
+        WHERE provider = $1 AND appid = $2 AND openid = $3
+        "#,
+    )
+    .bind(PROVIDER_DEV)
+    .bind(appid)
+    .bind(&openid)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (user_id, is_new_user) = if let Some(user_id) = existing_user_id {
+        (user_id, false)
+    } else {
+        let user_id: Uuid = sqlx::query_scalar("INSERT INTO users DEFAULT VALUES RETURNING id")
+            .fetch_one(&mut *tx)
+            .await?;
+
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO auth_identities (user_id, provider, appid, openid, unionid)
+            VALUES ($1, $2, $3, $4, NULL)
+            "#,
+        )
+        .bind(user_id)
+        .bind(PROVIDER_DEV)
+        .bind(appid)
+        .bind(&openid)
         .execute(&mut *tx)
         .await?;
 
