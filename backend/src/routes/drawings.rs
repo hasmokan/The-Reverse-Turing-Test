@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json,
 };
+use chrono::Utc;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use socketioxide::SocketIo;
 use std::sync::Arc;
@@ -32,6 +33,11 @@ pub async fn create_drawing(
 
     if room.status != "active" {
         return Err(ApiError::BadRequest("Room is not active".to_string()));
+    }
+    if let Some(voting_ends_at) = room.voting_ends_at {
+        if Utc::now() < voting_ends_at {
+            return Err(ApiError::BadRequest("Voting is in progress".to_string()));
+        }
     }
 
     // 获取主题配置
@@ -250,7 +256,7 @@ pub async fn vote_drawing(
         .fetch_one(&state.db)
         .await?;
 
-    let threshold = room.vote_threshold();
+    let threshold = room.vote_threshold(&state.config);
 
     // 注意: Socket.IO 广播由 socketio_handler 的 vote:cast 事件处理
 

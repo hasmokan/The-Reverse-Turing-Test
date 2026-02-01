@@ -21,6 +21,14 @@ pub struct Config {
     pub wechat_mp_secret: Option<String>,
     pub auth_token_ttl_days: i64,
     pub dev_auth_enabled: bool,
+    pub vote_threshold_ratio: f64,
+    pub vote_min_threshold: i32,
+    pub human_eliminated_ratio: f64,
+    pub victory_human_survive_ratio: f64,
+    pub ai_overflow_delta: i64,
+    pub min_humans_to_start_voting: i64,
+    pub voting_duration_seconds: i64,
+    pub submit_duration_seconds: i64,
 }
 
 impl Config {
@@ -101,6 +109,38 @@ impl Config {
             dev_auth_enabled: std::env::var("DEV_AUTH_ENABLED")
                 .map(|v| v.to_lowercase() == "true")
                 .unwrap_or(false),
+            vote_threshold_ratio: std::env::var("VOTE_THRESHOLD_RATIO")
+                .unwrap_or_else(|_| "0.6".to_string())
+                .parse()
+                .context("VOTE_THRESHOLD_RATIO must be a valid float")?,
+            vote_min_threshold: std::env::var("VOTE_MIN_THRESHOLD")
+                .unwrap_or_else(|_| "2".to_string())
+                .parse()
+                .context("VOTE_MIN_THRESHOLD must be a valid number")?,
+            human_eliminated_ratio: std::env::var("HUMAN_ELIMINATED_RATIO")
+                .unwrap_or_else(|_| "0.4".to_string())
+                .parse()
+                .context("HUMAN_ELIMINATED_RATIO must be a valid float")?,
+            victory_human_survive_ratio: std::env::var("VICTORY_HUMAN_SURVIVE_RATIO")
+                .unwrap_or_else(|_| "0.6".to_string())
+                .parse()
+                .context("VICTORY_HUMAN_SURVIVE_RATIO must be a valid float")?,
+            ai_overflow_delta: std::env::var("AI_OVERFLOW_DELTA")
+                .unwrap_or_else(|_| "2".to_string())
+                .parse()
+                .context("AI_OVERFLOW_DELTA must be a valid number")?,
+            min_humans_to_start_voting: std::env::var("MIN_HUMANS_TO_START_VOTING")
+                .unwrap_or_else(|_| "2".to_string())
+                .parse()
+                .context("MIN_HUMANS_TO_START_VOTING must be a valid number")?,
+            voting_duration_seconds: std::env::var("VOTING_DURATION_SECONDS")
+                .unwrap_or_else(|_| "45".to_string())
+                .parse()
+                .context("VOTING_DURATION_SECONDS must be a valid number")?,
+            submit_duration_seconds: std::env::var("SUBMIT_DURATION_SECONDS")
+                .unwrap_or_else(|_| "60".to_string())
+                .parse()
+                .context("SUBMIT_DURATION_SECONDS must be a valid number")?,
         })
     }
 }
