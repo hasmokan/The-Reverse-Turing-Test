@@ -20,67 +20,15 @@
         },
         {
             "parameters": {
-                "method": "POST",
-                "url": "https://api.zenmux.ai/v1/images/generations",
-                "authentication": "predefinedCredentialType",
-                "nodeCredentialType": "httpBearerAuth",
-                "sendBody": true,
-                "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({\n  \"model\": \"google/gemini-3-pro-image-preview\",\n  \"prompt\": `A ${$json.theme.prompt_style} of a ${$json.theme.keywords[Math.floor(Math.random() * $json.theme.keywords.length)]}, colors: ${$json.theme.palette.slice(0, 3).join(', ')}`,\n  \"n\": 1,\n  \"size\": \"256x256\",\n  \"response_format\": \"b64_json\"\n}) }}",
-                "options": {
-                    "timeout": 60000
-                }
+                "jsCode": "const input = $json;\n\nconst theme = input.theme || {};\nconst keywords = Array.isArray(theme.keywords) ? theme.keywords : [];\nconst palette = Array.isArray(theme.palette) ? theme.palette : [];\nconst promptStyle = typeof theme.prompt_style === 'string' ? theme.prompt_style : 'stylized illustration';\n\nconst keyword = keywords.length ? keywords[Math.floor(Math.random() * keywords.length)] : 'fish';\nconst colors = palette.slice(0, 3).join(', ');\n\nconst modelFast = process.env.ZENMUX_MODEL_FAST || 'nano banana pro';\nconst modelQuality = process.env.ZENMUX_MODEL_QUALITY || modelFast;\nconst modelFallback = process.env.ZENMUX_MODEL_FALLBACK || 'google/gemini-3-pro-image-preview';\n\nconst sizeFast = process.env.ZENMUX_SIZE_FAST || '256x256';\nconst sizeQuality = process.env.ZENMUX_SIZE_QUALITY || '512x512';\nconst sizeFallback = process.env.ZENMUX_SIZE_FALLBACK || sizeQuality;\n\nconst promptFast = `A ${promptStyle} of a ${keyword}. Simple clean background. High contrast, crisp silhouette. Colors: ${colors}. No text, no watermark, no logo.`;\nconst promptQuality = `A ${promptStyle} of a ${keyword}. Highly detailed but clean silhouette, crisp edges, soft shading. Simple background. Colors: ${colors}. No text, no watermark, no logo.`;\n\nconst name = keyword;\nconst description = `${promptStyle}`.slice(0, 60);\n\nreturn [{\n  json: {\n    ...input,\n    keyword,\n    name,\n    description,\n    model_fast: modelFast,\n    model_quality: modelQuality,\n    model_fallback: modelFallback,\n    size_fast: sizeFast,\n    size_quality: sizeQuality,\n    size_fallback: sizeFallback,\n    prompt_fast: promptFast,\n    prompt_quality: promptQuality,\n  }\n}];\n"
             },
-            "id": "generate-image",
-            "name": "Generate AI Image",
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.2,
+            "id": "prepare",
+            "name": "Prepare",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
             "position": [
-                440,
+                420,
                 300
-            ],
-            "credentials": {
-                "httpBearerAuth": {
-                    "id": "zenmux-api",
-                    "name": "Zenmux API"
-                }
-            },
-            "onError": "continueErrorOutput"
-        },
-        {
-            "parameters": {
-                "method": "POST",
-                "url": "={{ $('Webhook').item.json.callback_url }}",
-                "sendBody": true,
-                "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({\n  \"task_id\": $('Webhook').item.json.task_id,\n  \"status\": \"completed\",\n  \"image_data\": 'data:image/png;base64,' + $json.data[0].b64_json,\n  \"name\": $('Webhook').item.json.theme.keywords[Math.floor(Math.random() * $('Webhook').item.json.theme.keywords.length)]\n}) }}",
-                "options": {}
-            },
-            "id": "callback-success",
-            "name": "Callback Success",
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.2,
-            "position": [
-                660,
-                220
-            ]
-        },
-        {
-            "parameters": {
-                "method": "POST",
-                "url": "={{ $('Webhook').item.json.callback_url }}",
-                "sendBody": true,
-                "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({\n  \"task_id\": $('Webhook').item.json.task_id,\n  \"status\": \"failed\",\n  \"error_message\": $json.error?.message || 'Unknown error'\n}) }}",
-                "options": {}
-            },
-            "id": "callback-error",
-            "name": "Callback Error",
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.2,
-            "position": [
-                660,
-                400
             ]
         },
         {
@@ -93,8 +41,131 @@
             "type": "n8n-nodes-base.respondToWebhook",
             "typeVersion": 1.1,
             "position": [
-                880,
+                640,
                 300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.zenmux.ai/v1/images/generations",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "httpBearerAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({\n  \"model\": $('Prepare').item.json.model_fast,\n  \"prompt\": $('Prepare').item.json.prompt_fast,\n  \"n\": 1,\n  \"size\": $('Prepare').item.json.size_fast,\n  \"response_format\": \"b64_json\"\n}) }}",
+                "options": {
+                    "timeout": 30000
+                }
+            },
+            "id": "generate-fast",
+            "name": "Generate Fast",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                640,
+                160
+            ],
+            "credentials": {
+                "httpBearerAuth": {
+                    "id": "zenmux-api",
+                    "name": "Zenmux API"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.zenmux.ai/v1/images/generations",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "httpBearerAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({\n  \"model\": $('Prepare').item.json.model_quality,\n  \"prompt\": $('Prepare').item.json.prompt_quality,\n  \"n\": 1,\n  \"size\": $('Prepare').item.json.size_quality,\n  \"response_format\": \"b64_json\"\n}) }}",
+                "options": {
+                    "timeout": 60000
+                }
+            },
+            "id": "generate-quality",
+            "name": "Generate Quality",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                840,
+                160
+            ],
+            "credentials": {
+                "httpBearerAuth": {
+                    "id": "zenmux-api",
+                    "name": "Zenmux API"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.zenmux.ai/v1/images/generations",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "httpBearerAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({\n  \"model\": $('Prepare').item.json.model_fallback,\n  \"prompt\": $('Prepare').item.json.prompt_quality,\n  \"n\": 1,\n  \"size\": $('Prepare').item.json.size_fallback,\n  \"response_format\": \"b64_json\"\n}) }}",
+                "options": {
+                    "timeout": 90000
+                }
+            },
+            "id": "generate-fallback",
+            "name": "Generate Fallback",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1040,
+                160
+            ],
+            "credentials": {
+                "httpBearerAuth": {
+                    "id": "zenmux-api",
+                    "name": "Zenmux API"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $('Prepare').item.json.callback_url }}",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({\n  \"task_id\": $('Prepare').item.json.task_id,\n  \"status\": \"completed\",\n  \"image_data\": 'data:image/png;base64,' + $json.data[0].b64_json,\n  \"name\": $('Prepare').item.json.name,\n  \"description\": $('Prepare').item.json.description\n}) }}",
+                "options": {}
+            },
+            "id": "callback-success",
+            "name": "Callback Success",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1240,
+                120
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $('Prepare').item.json.callback_url }}",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({\n  \"task_id\": $('Prepare').item.json.task_id,\n  \"status\": \"failed\",\n  \"error_message\": $json.error?.message || 'Unknown error'\n}) }}",
+                "options": {}
+            },
+            "id": "callback-error",
+            "name": "Callback Error",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1240,
+                240
             ]
         }
     ],
@@ -103,14 +174,66 @@
             "main": [
                 [
                     {
-                        "node": "Generate AI Image",
+                        "node": "Prepare",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Generate AI Image": {
+        "Prepare": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Generate Fast",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Fast": {
+            "main": [
+                [
+                    {
+                        "node": "Callback Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Generate Quality",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Quality": {
+            "main": [
+                [
+                    {
+                        "node": "Callback Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Generate Fallback",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Fallback": {
             "main": [
                 [
                     {
@@ -122,28 +245,6 @@
                 [
                     {
                         "node": "Callback Error",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Callback Success": {
-            "main": [
-                [
-                    {
-                        "node": "Respond to Webhook",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Callback Error": {
-            "main": [
-                [
-                    {
-                        "node": "Respond to Webhook",
                         "type": "main",
                         "index": 0
                     }
