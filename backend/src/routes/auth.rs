@@ -24,6 +24,24 @@ pub struct WechatMpLoginResponse {
     pub is_new_user: bool,
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuestLoginRequest {
+    #[serde(default, alias = "device_id")]
+    pub device_id: Option<String>,
+    #[serde(default, alias = "session_id", alias = "legacySessionId")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuestLoginResponse {
+    pub token: String,
+    pub user_id: String,
+    pub is_new_user: bool,
+    pub is_guest: bool,
+}
+
 pub async fn wechat_mp_login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<WechatMpLoginRequest>,
@@ -40,6 +58,26 @@ pub async fn wechat_mp_login(
         token: result.token,
         user_id: result.user_id.to_string(),
         is_new_user: result.is_new_user,
+    }))
+}
+
+pub async fn guest_login(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<GuestLoginRequest>,
+) -> Result<Json<GuestLoginResponse>, ApiError> {
+    let result = auth::login_guest_device(
+        &state.db,
+        &state.config,
+        req.device_id.as_deref(),
+        req.session_id.as_deref(),
+    )
+    .await?;
+
+    Ok(Json(GuestLoginResponse {
+        token: result.token,
+        user_id: result.user_id.to_string(),
+        is_new_user: result.is_new_user,
+        is_guest: true,
     }))
 }
 

@@ -5,15 +5,49 @@ use chrono::{Duration, Utc};
 use socketioxide::extract::{Data, SocketRef, State as SioState};
 use std::sync::Arc;
 use tracing::{debug, info};
+use uuid::Uuid;
 
 use crate::models::{drawing_image_url, Drawing, DrawingItemRow, Room, Theme, ThemeResponse};
-use crate::services::AppState;
+use crate::services::{auth, AppState};
 use crate::ws::game_rules;
 
 /// 存储在 socket extensions 中的会话信息
 #[derive(Clone)]
 pub struct RoomSession {
     pub room_code: String,
+}
+
+/// 存储在 socket extensions 中的鉴权信息
+#[derive(Clone)]
+pub struct AuthSession {
+    pub user_id: Uuid,
+}
+
+#[derive(Debug)]
+pub struct WsAuthError(String);
+
+impl std::fmt::Display for WsAuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for WsAuthError {}
+
+pub async fn auth_middleware(
+    socket: SocketRef,
+    state: SioState<Arc<AppState>>,
+    Data(auth_data): Data<ConnectAuthData>,
+) -> Result<(), WsAuthError> {
+    let token = extract_auth_token(&auth_data)
+        .ok_or_else(|| WsAuthError("missing auth token".to_string()))?;
+
+    let user_id = auth::user_id_from_token(&state.db, &token)
+        .await
+        .map_err(|_| WsAuthError("invalid auth token".to_string()))?;
+
+    socket.extensions.insert(AuthSession { user_id });
+    Ok(())
 }
 
 /// Socket.IO 连接处理
@@ -93,6 +127,14 @@ async fn on_vote_cast(
     state: SioState<Arc<AppState>>,
 ) {
     info!("[Socket.IO] Vote cast: {:?}", data);
+    let Some(voter_id) = authenticated_voter_id(&socket) else {
+        let payload = serde_json::json!({
+            "reason": "unauthorized",
+            "fishId": data.fish_id
+        });
+        let _ = socket.emit("vote:error", &payload);
+        return;
+    };
 
     let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
         Ok(id) => id,
@@ -136,7 +178,7 @@ async fn on_vote_cast(
         "INSERT INTO votes (drawing_id, session_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
     )
     .bind(fish_id)
-    .bind(&data.voter_id)
+    .bind(&voter_id)
     .execute(&state.db)
     .await
     {
@@ -180,7 +222,7 @@ async fn on_vote_cast(
     // 通知被投票者 vote:received
     let vote_received = serde_json::json!({
         "fishId": data.fish_id,
-        "voterId": data.voter_id
+        "voterId": voter_id
     });
     let _ = socket
         .within(room.room_code.clone())
@@ -231,6 +273,14 @@ async fn on_vote_retract(
     state: SioState<Arc<AppState>>,
 ) {
     info!("[Socket.IO] Vote retract: {:?}", data);
+    let Some(voter_id) = authenticated_voter_id(&socket) else {
+        let payload = serde_json::json!({
+            "reason": "unauthorized",
+            "fishId": data.fish_id
+        });
+        let _ = socket.emit("vote:error", &payload);
+        return;
+    };
 
     let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
         Ok(id) => id,
@@ -272,7 +322,7 @@ async fn on_vote_retract(
     let delete_result =
         match sqlx::query("DELETE FROM votes WHERE drawing_id = $1 AND session_id = $2")
             .bind(fish_id)
-            .bind(&data.voter_id)
+            .bind(&voter_id)
             .execute(&state.db)
             .await
         {
@@ -486,6 +536,15 @@ async fn on_comment_add(socket: SocketRef, Data(data): Data<CommentAddData>) {
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ConnectAuthData {
+    #[serde(default)]
+    token: Option<String>,
+    #[serde(default)]
+    authorization: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RoomJoinData {
     room_id: String,
 }
@@ -500,7 +559,6 @@ struct RoomLeaveData {
 #[serde(rename_all = "camelCase")]
 struct BattleVoteCastData {
     fish_id: String,
-    voter_id: String,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -515,6 +573,76 @@ struct CommentAddData {
 struct CommentData {
     author: String,
     content: String,
+}
+
+fn extract_auth_token(auth: &ConnectAuthData) -> Option<String> {
+    if let Some(token) = auth
+        .token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Some(token.to_string());
+    }
+
+    let authorization = auth
+        .authorization
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+
+    if authorization.len() >= 7 && authorization[..7].eq_ignore_ascii_case("Bearer ") {
+        let bearer = authorization[7..].trim();
+        if bearer.is_empty() {
+            None
+        } else {
+            Some(bearer.to_string())
+        }
+    } else {
+        Some(authorization.to_string())
+    }
+}
+
+fn authenticated_voter_id(socket: &SocketRef) -> Option<String> {
+    socket
+        .extensions
+        .get::<AuthSession>()
+        .map(|session| session.user_id.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_auth_token, ConnectAuthData};
+
+    #[test]
+    fn extract_auth_token_prefers_token_field() {
+        let payload = ConnectAuthData {
+            token: Some("token-123".to_string()),
+            authorization: Some("Bearer ignored".to_string()),
+        };
+
+        assert_eq!(extract_auth_token(&payload), Some("token-123".to_string()));
+    }
+
+    #[test]
+    fn extract_auth_token_supports_bearer_authorization() {
+        let payload = ConnectAuthData {
+            token: None,
+            authorization: Some("Bearer token-xyz".to_string()),
+        };
+
+        assert_eq!(extract_auth_token(&payload), Some("token-xyz".to_string()));
+    }
+
+    #[test]
+    fn extract_auth_token_returns_none_when_missing() {
+        let payload = ConnectAuthData {
+            token: None,
+            authorization: None,
+        };
+
+        assert_eq!(extract_auth_token(&payload), None);
+    }
 }
 
 // === Helper Functions ===

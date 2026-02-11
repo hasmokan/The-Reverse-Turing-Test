@@ -10,6 +10,7 @@ use crate::services::ApiError;
 
 pub const PROVIDER_WECHAT_MINIPROGRAM: &str = "wechat_miniprogram";
 pub const PROVIDER_DEV: &str = "dev";
+pub const PROVIDER_GUEST_DEVICE: &str = "guest_device";
 
 pub struct LoginResult {
     pub token: String,
@@ -34,6 +35,17 @@ fn generate_token() -> String {
     let mut bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn normalize_guest_openid(device_id: Option<&str>) -> String {
+    if let Some(device_id) = device_id {
+        let trimmed = device_id.trim();
+        if !trimmed.is_empty() {
+            return trimmed.chars().take(120).collect();
+        }
+    }
+
+    format!("guest:{}", Uuid::new_v4())
 }
 
 async fn wechat_code_to_session(config: &Config, code: &str) -> Result<WechatSession, ApiError> {
@@ -267,6 +279,78 @@ pub async fn login_dev(
     })
 }
 
+pub async fn login_guest_device(
+    db: &PgPool,
+    config: &Config,
+    device_id: Option<&str>,
+    legacy_session_id: Option<&str>,
+) -> Result<LoginResult, ApiError> {
+    let appid = "standalone";
+    let openid = normalize_guest_openid(device_id);
+
+    let mut tx = db.begin().await?;
+
+    let existing_user_id: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT user_id
+        FROM auth_identities
+        WHERE provider = $1 AND appid = $2 AND openid = $3
+        "#,
+    )
+    .bind(PROVIDER_GUEST_DEVICE)
+    .bind(appid)
+    .bind(&openid)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (user_id, is_new_user) = if let Some(user_id) = existing_user_id {
+        (user_id, false)
+    } else {
+        let user_id: Uuid = sqlx::query_scalar("INSERT INTO users DEFAULT VALUES RETURNING id")
+            .fetch_one(&mut *tx)
+            .await?;
+
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO auth_identities (user_id, provider, appid, openid, unionid)
+            VALUES ($1, $2, $3, $4, NULL)
+            "#,
+        )
+        .bind(user_id)
+        .bind(PROVIDER_GUEST_DEVICE)
+        .bind(appid)
+        .bind(&openid)
+        .execute(&mut *tx)
+        .await?;
+
+        (user_id, true)
+    };
+
+    let token = generate_token();
+    let expires_at = Utc::now() + Duration::days(config.auth_token_ttl_days);
+
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO auth_sessions (token, user_id, legacy_session_id, expires_at)
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind(&token)
+    .bind(user_id)
+    .bind(legacy_session_id)
+    .bind(expires_at)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(LoginResult {
+        token,
+        user_id,
+        is_new_user,
+    })
+}
+
 pub async fn user_id_from_token(db: &PgPool, token: &str) -> Result<Uuid, ApiError> {
     let user_id: Option<Uuid> = sqlx::query_scalar(
         r#"
@@ -317,4 +401,30 @@ pub async fn list_identities_for_user(
     .fetch_all(db)
     .await?;
     Ok(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_guest_openid;
+
+    #[test]
+    fn normalize_guest_openid_trims_device_id() {
+        let openid = normalize_guest_openid(Some("  device-abc  "));
+        assert_eq!(openid, "device-abc");
+    }
+
+    #[test]
+    fn normalize_guest_openid_falls_back_to_generated_guest_id() {
+        let openid = normalize_guest_openid(Some("   "));
+        assert!(openid.starts_with("guest:"));
+        assert!(openid.len() > "guest:".len());
+    }
+
+    #[test]
+    fn normalize_guest_openid_truncates_too_long_device_id() {
+        let device_id = "a".repeat(200);
+        let openid = normalize_guest_openid(Some(&device_id));
+        assert_eq!(openid.len(), 120);
+        assert!(openid.chars().all(|c| c == 'a'));
+    }
 }

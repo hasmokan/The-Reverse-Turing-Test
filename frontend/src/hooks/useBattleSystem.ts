@@ -21,7 +21,6 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
   const {
     bullet,
     fishVotes,
-    playerId,
     playerFishId,
     items,
     aiCount,
@@ -93,12 +92,12 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
 
       // 发送投票事件到后端
       if (emit) {
-        emit('vote:cast', { fishId, voterId: playerId })
+        emit('vote:cast', { fishId })
       }
 
       return true
     },
-    [canVote, fireBullet, addFloatingDamage, emit, playerId]
+    [canVote, fireBullet, addFloatingDamage, emit]
   )
 
   // 换目标
@@ -120,13 +119,13 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
 
       // 发送撤票 + 新投票事件
       if (emit) {
-        emit('vote:retract', { fishId: oldTarget, voterId: playerId })
-        emit('vote:cast', { fishId: newFishId, voterId: playerId })
+        emit('vote:retract', { fishId: oldTarget })
+        emit('vote:cast', { fishId: newFishId })
       }
 
       return true
     },
-    [bullet.currentTarget, changeTarget, addFloatingDamage, emit, playerId]
+    [bullet.currentTarget, changeTarget, addFloatingDamage, emit]
   )
 
   // 追击
@@ -141,12 +140,12 @@ export function useBattleSystem({ emit }: UseBattleSystemOptions = {}) {
 
       // 发送追击事件
       if (emit) {
-        emit('vote:chase', { fishId, voterId: playerId })
+        emit('vote:chase', { fishId })
       }
 
       return true
     },
-    [canChase, chaseFire, emit, playerId]
+    [canChase, chaseFire, emit]
   )
 
   // 获取鱼的当前票数

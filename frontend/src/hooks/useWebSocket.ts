@@ -18,6 +18,7 @@ import { ENV_CONFIG } from '@/config/env'
 interface UseWebSocketOptions {
   url?: string
   roomId: string
+  authToken?: string
   enabled?: boolean
 }
 
@@ -119,7 +120,7 @@ function convertBackendItem(item: BackendGameItem): GameItem {
   }
 }
 
-export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOptions) {
+export function useWebSocket({ url, roomId, authToken, enabled = true }: UseWebSocketOptions) {
   const socketRef = useRef<Socket | null>(null)
   const {
     addItem,
@@ -147,7 +148,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
 
   // 连接 WebSocket
   useEffect(() => {
-    if (!enabled || !roomId) return
+    if (!enabled || !roomId || !authToken) return
 
     // 重置同步状态
     setIsSynced(false)
@@ -160,6 +161,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
+      auth: { token: authToken },
     })
 
     const socket = socketRef.current
@@ -330,6 +332,7 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
   }, [
     url,
     roomId,
+    authToken,
     enabled,
     addItem,
     removeItem,
@@ -391,24 +394,24 @@ export function useWebSocket({ url, roomId, enabled = true }: UseWebSocketOption
 
   // 投票
   const battleVote = useCallback(
-    (fishId: string, voterId: string) => {
-      emit('vote:cast', { fishId, voterId })
+    (fishId: string) => {
+      emit('vote:cast', { fishId })
     },
     [emit]
   )
 
   // 撤票
   const retractVote = useCallback(
-    (fishId: string, voterId: string) => {
-      emit('vote:retract', { fishId, voterId })
+    (fishId: string) => {
+      emit('vote:retract', { fishId })
     },
     [emit]
   )
 
   // 追击
   const chaseVote = useCallback(
-    (fishId: string, voterId: string) => {
-      emit('vote:chase', { fishId, voterId })
+    (fishId: string) => {
+      emit('vote:chase', { fishId })
     },
     [emit]
   )

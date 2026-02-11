@@ -6,6 +6,9 @@
 import { ENV_CONFIG } from '@/config/env'
 
 const API_BASE = ENV_CONFIG.API_URL
+const DEVICE_ID_STORAGE_KEY = 'mimic_device_id'
+const AUTH_TOKEN_STORAGE_KEY = 'mimic_auth_token'
+const AUTH_USER_ID_STORAGE_KEY = 'mimic_auth_user_id'
 
 // ============ 类型定义 ============
 
@@ -81,6 +84,13 @@ export interface VoteResponse {
 export interface ReportResponse {
   report_count: number
   hidden: boolean
+}
+
+export interface GuestLoginResponse {
+  token: string
+  userId: string
+  isNewUser: boolean
+  isGuest: boolean
 }
 
 // ============ API 函数 ============
@@ -214,6 +224,16 @@ export async function reportDrawing(
   })
 }
 
+export async function guestLogin(payload: {
+  deviceId?: string
+  sessionId?: string
+}): Promise<GuestLoginResponse> {
+  return request<GuestLoginResponse>('/api/auth/guest/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 // ============ 健康检查 ============
 
 /**
@@ -237,6 +257,10 @@ export function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
 }
 
+export function generateDeviceId(): string {
+  return `device_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`
+}
+
 /**
  * 从 localStorage 获取或创建会话 ID
  */
@@ -249,6 +273,48 @@ export function getOrCreateSessionId(): string {
     localStorage.setItem('mimic_session_id', sessionId)
   }
   return sessionId
+}
+
+export function getOrCreateDeviceId(): string {
+  if (typeof window === 'undefined') return generateDeviceId()
+
+  let deviceId = localStorage.getItem(DEVICE_ID_STORAGE_KEY)
+  if (!deviceId) {
+    deviceId = generateDeviceId()
+    localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId)
+  }
+  return deviceId
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+}
+
+export function getAuthUserId(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(AUTH_USER_ID_STORAGE_KEY)
+}
+
+export function setAuthSession(token: string, userId: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+  localStorage.setItem(AUTH_USER_ID_STORAGE_KEY, userId)
+}
+
+export async function ensureGuestAuth(
+  sessionId?: string
+): Promise<{ token: string; userId: string }> {
+  const cachedToken = getAuthToken()
+  const cachedUserId = getAuthUserId()
+  if (cachedToken && cachedUserId) {
+    return { token: cachedToken, userId: cachedUserId }
+  }
+
+  const deviceId = getOrCreateDeviceId()
+  const resp = await guestLogin({ deviceId, sessionId })
+  setAuthSession(resp.token, resp.userId)
+  return { token: resp.token, userId: resp.userId }
 }
 
 /**
