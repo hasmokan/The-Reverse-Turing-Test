@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, director, Color } from 'cc';
+import { _decorator, Component, Node, Sprite, director, Color, find } from 'cc';
 import { ResourceLoader } from './ResourceLoader';
 import { LoadingScreen } from '../ui/LoadingScreen';
 import { ResourceConfig } from './ResourceConfig';
@@ -73,8 +73,8 @@ export class GameBootstrap extends Component {
                 console.warn('[GameBootstrap] 加载失败的资源:', result.errors);
             }
 
-            // 应用加载的背景图
-            this.applyBackgroundImage();
+            // 应用所有远程图片
+            this.applyRemoteImages();
 
         } catch (error) {
             console.error('[GameBootstrap] 资源加载异常:', error);
@@ -85,23 +85,57 @@ export class GameBootstrap extends Component {
     }
 
     /**
-     * 应用背景图
+     * 应用所有远程图片到对应的场景节点
      */
-    private applyBackgroundImage(): void {
-        if (!this.backgroundSprite || !this.resourceLoader) {
+    private applyRemoteImages(): void {
+        if (!this.resourceLoader) return;
+
+        const canvas = find('Canvas');
+        if (!canvas) {
+            console.warn('[GameBootstrap] 未找到 Canvas 节点');
             return;
         }
 
-        // 获取主背景图
-        const spriteFrame = this.resourceLoader.getSpriteFrame('home_bg');
-        if (spriteFrame) {
-            this.backgroundSprite.spriteFrame = spriteFrame;
-            // 修复：设置颜色为白色以正常显示图片（默认黑色会使图片不可见）
-            this.backgroundSprite.color = new Color(255, 255, 255, 255);
-            console.log('[GameBootstrap] 背景图已应用');
-        } else {
-            console.warn('[GameBootstrap] 未找到背景图: home_bg');
+        const mapping = ResourceConfig.NODE_MAPPING;
+        let applied = 0;
+
+        for (const [key, nodeName] of Object.entries(mapping)) {
+            const spriteFrame = this.resourceLoader.getSpriteFrame(key);
+            if (!spriteFrame) {
+                console.warn(`[GameBootstrap] 未找到远程资源: ${key}`);
+                continue;
+            }
+
+            const targetNode = this.findNodeByName(canvas, nodeName);
+            if (!targetNode) {
+                console.warn(`[GameBootstrap] 未找到节点: ${nodeName}`);
+                continue;
+            }
+
+            const sprite = targetNode.getComponent(Sprite);
+            if (!sprite) {
+                console.warn(`[GameBootstrap] 节点 ${nodeName} 没有 Sprite 组件`);
+                continue;
+            }
+
+            sprite.spriteFrame = spriteFrame;
+            sprite.color = new Color(255, 255, 255, 255);
+            applied++;
         }
+
+        console.log(`[GameBootstrap] 已应用 ${applied}/${Object.keys(mapping).length} 个远程图片`);
+    }
+
+    /**
+     * 递归查找子节点
+     */
+    private findNodeByName(root: Node, name: string): Node | null {
+        for (const child of root.children) {
+            if (child.name === name) return child;
+            const found = this.findNodeByName(child, name);
+            if (found) return found;
+        }
+        return null;
     }
 
     /**

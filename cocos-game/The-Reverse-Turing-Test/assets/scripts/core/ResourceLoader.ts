@@ -149,7 +149,11 @@ export class ResourceLoader extends Component {
      */
     private async _loadImageInternal(url: string, cacheKey: string): Promise<SpriteFrame | null> {
         return new Promise((resolve) => {
-            assetManager.loadRemote<ImageAsset>(url, { ext: '.png' }, (err, imageAsset) => {
+            // 从 URL 推断扩展名，去掉查询参数
+            const cleanUrl = url.split('?')[0];
+            const ext = cleanUrl.match(/\.(png|jpg|jpeg|webp)$/i)?.[0] || '.png';
+
+            assetManager.loadRemote<ImageAsset>(url, { ext }, (err, imageAsset) => {
                 if (err) {
                     error(`[ResourceLoader] 加载图片失败: ${url}`, err);
                     resolve(null);

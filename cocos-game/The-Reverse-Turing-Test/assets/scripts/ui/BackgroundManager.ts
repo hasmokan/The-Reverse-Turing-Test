@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, SpriteFrame, UITransform, view, ResolutionPolicy, Size, Widget, screen, Enum } from 'cc';
+import { _decorator, Component, Node, Sprite, SpriteFrame, UITransform, view, ResolutionPolicy, Size, Widget, screen, Enum, assetManager, ImageAsset, Texture2D } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -21,6 +21,9 @@ Enum(FitMode);
  */
 @ccclass('BackgroundManager')
 export class BackgroundManager extends Component {
+
+    @property({ tooltip: '远程背景图 URL（优先于本地 backgroundImage）' })
+    remoteUrl: string = '';
 
     @property(SpriteFrame)
     backgroundImage: SpriteFrame = null!;
@@ -47,10 +50,42 @@ export class BackgroundManager extends Component {
         this.setupBackground();
     }
 
-    start() {
+    async start() {
+        // 优先从远程 URL 加载背景
+        if (this.remoteUrl) {
+            await this.loadRemoteBackground(this.remoteUrl);
+        }
+
         if (this.autoFitScreen) {
             this.fitToScreen();
         }
+    }
+
+    /**
+     * 从远程 URL 加载背景图
+     */
+    private loadRemoteBackground(url: string): Promise<void> {
+        return new Promise((resolve) => {
+            const cleanUrl = url.split('?')[0];
+            const ext = cleanUrl.match(/\.(png|jpg|jpeg|webp)$/i)?.[0] || '.png';
+
+            assetManager.loadRemote<ImageAsset>(url, { ext }, (err, imageAsset) => {
+                if (err) {
+                    console.error('[BackgroundManager] 远程背景加载失败:', err);
+                    resolve();
+                    return;
+                }
+
+                const texture = new Texture2D();
+                texture.image = imageAsset;
+                const spriteFrame = new SpriteFrame();
+                spriteFrame.texture = texture;
+
+                this.changeBackground(spriteFrame);
+                console.log('[BackgroundManager] 远程背景已加载');
+                resolve();
+            });
+        });
     }
 
     /**
