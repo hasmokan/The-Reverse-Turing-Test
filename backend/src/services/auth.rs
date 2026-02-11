@@ -18,6 +18,13 @@ pub struct LoginResult {
     pub is_new_user: bool,
 }
 
+pub struct GuestLoginResult {
+    pub token: String,
+    pub user_id: Uuid,
+    pub is_new_user: bool,
+    pub device_token: String,
+}
+
 pub struct WechatSession {
     pub openid: String,
     pub unionid: Option<String>,
@@ -37,15 +44,23 @@ fn generate_token() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn normalize_guest_openid(device_id: Option<&str>) -> String {
-    if let Some(device_id) = device_id {
-        let trimmed = device_id.trim();
-        if !trimmed.is_empty() {
-            return trimmed.chars().take(120).collect();
+fn is_valid_guest_device_token(token: &str) -> bool {
+    token.len() <= 120
+        && token.starts_with("guest_device:")
+        && token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '-' || c == '_')
+}
+
+fn normalize_guest_openid(device_token: Option<&str>) -> String {
+    if let Some(device_token) = device_token {
+        let trimmed = device_token.trim();
+        if !trimmed.is_empty() && is_valid_guest_device_token(trimmed) {
+            return trimmed.to_string();
         }
     }
 
-    format!("guest:{}", Uuid::new_v4())
+    format!("guest_device:{}", Uuid::new_v4())
 }
 
 async fn wechat_code_to_session(config: &Config, code: &str) -> Result<WechatSession, ApiError> {
@@ -282,11 +297,11 @@ pub async fn login_dev(
 pub async fn login_guest_device(
     db: &PgPool,
     config: &Config,
-    device_id: Option<&str>,
+    device_token: Option<&str>,
     legacy_session_id: Option<&str>,
-) -> Result<LoginResult, ApiError> {
+) -> Result<GuestLoginResult, ApiError> {
     let appid = "standalone";
-    let openid = normalize_guest_openid(device_id);
+    let openid = normalize_guest_openid(device_token);
 
     let mut tx = db.begin().await?;
 
@@ -344,10 +359,11 @@ pub async fn login_guest_device(
 
     tx.commit().await?;
 
-    Ok(LoginResult {
+    Ok(GuestLoginResult {
         token,
         user_id,
         is_new_user,
+        device_token: openid,
     })
 }
 
@@ -405,26 +421,32 @@ pub async fn list_identities_for_user(
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_guest_openid;
+    use super::{is_valid_guest_device_token, normalize_guest_openid};
 
     #[test]
-    fn normalize_guest_openid_trims_device_id() {
-        let openid = normalize_guest_openid(Some("  device-abc  "));
-        assert_eq!(openid, "device-abc");
+    fn normalize_guest_openid_accepts_existing_server_token() {
+        let openid = normalize_guest_openid(Some("  guest_device:abc-123  "));
+        assert_eq!(openid, "guest_device:abc-123");
     }
 
     #[test]
-    fn normalize_guest_openid_falls_back_to_generated_guest_id() {
+    fn normalize_guest_openid_rejects_plain_device_id_and_generates_server_token() {
+        let openid = normalize_guest_openid(Some("ios-device-raw-id"));
+        assert!(openid.starts_with("guest_device:"));
+        assert_ne!(openid, "ios-device-raw-id");
+    }
+
+    #[test]
+    fn normalize_guest_openid_falls_back_to_generated_server_token_for_empty_input() {
         let openid = normalize_guest_openid(Some("   "));
-        assert!(openid.starts_with("guest:"));
-        assert!(openid.len() > "guest:".len());
+        assert!(openid.starts_with("guest_device:"));
+        assert!(openid.len() > "guest_device:".len());
     }
 
     #[test]
-    fn normalize_guest_openid_truncates_too_long_device_id() {
-        let device_id = "a".repeat(200);
-        let openid = normalize_guest_openid(Some(&device_id));
-        assert_eq!(openid.len(), 120);
-        assert!(openid.chars().all(|c| c == 'a'));
+    fn validate_guest_device_token_format() {
+        assert!(is_valid_guest_device_token("guest_device:ok-123_abc"));
+        assert!(!is_valid_guest_device_token("device_123"));
+        assert!(!is_valid_guest_device_token("guest_device:contains space"));
     }
 }

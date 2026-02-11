@@ -27,6 +27,9 @@ pub struct WechatMpLoginResponse {
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuestLoginRequest {
+    #[serde(default, alias = "deviceToken")]
+    pub device_token: Option<String>,
+    // Deprecated compatibility field; ignored for identity binding.
     #[serde(default, alias = "device_id")]
     pub device_id: Option<String>,
     #[serde(default, alias = "session_id", alias = "legacySessionId")]
@@ -40,6 +43,7 @@ pub struct GuestLoginResponse {
     pub user_id: String,
     pub is_new_user: bool,
     pub is_guest: bool,
+    pub device_token: String,
 }
 
 pub async fn wechat_mp_login(
@@ -65,10 +69,11 @@ pub async fn guest_login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<GuestLoginRequest>,
 ) -> Result<Json<GuestLoginResponse>, ApiError> {
+    let requested_device_token = req.device_token.as_deref().or(req.device_id.as_deref());
     let result = auth::login_guest_device(
         &state.db,
         &state.config,
-        req.device_id.as_deref(),
+        requested_device_token,
         req.session_id.as_deref(),
     )
     .await?;
@@ -78,6 +83,7 @@ pub async fn guest_login(
         user_id: result.user_id.to_string(),
         is_new_user: result.is_new_user,
         is_guest: true,
+        device_token: result.device_token,
     }))
 }
 

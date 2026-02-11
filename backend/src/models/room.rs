@@ -22,7 +22,7 @@ pub struct Room {
 }
 
 impl Room {
-    /// 计算动态投票阈值 (在线人数的 30%)
+    /// 计算动态投票阈值（在线人数 * 配置比例，且不低于最小阈值）
     pub fn vote_threshold(&self, config: &Config) -> i32 {
         let ratio = config.vote_threshold_ratio.clamp(0.0, 1.0);
         let dynamic = ((self.online_count as f64) * ratio).ceil() as i32;

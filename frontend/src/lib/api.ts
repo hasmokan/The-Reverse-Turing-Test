@@ -6,7 +6,7 @@
 import { ENV_CONFIG } from '@/config/env'
 
 const API_BASE = ENV_CONFIG.API_URL
-const DEVICE_ID_STORAGE_KEY = 'mimic_device_id'
+const GUEST_DEVICE_TOKEN_STORAGE_KEY = 'mimic_guest_device_token'
 const AUTH_TOKEN_STORAGE_KEY = 'mimic_auth_token'
 const AUTH_USER_ID_STORAGE_KEY = 'mimic_auth_user_id'
 
@@ -91,6 +91,7 @@ export interface GuestLoginResponse {
   userId: string
   isNewUser: boolean
   isGuest: boolean
+  deviceToken: string
 }
 
 // ============ API 函数 ============
@@ -225,7 +226,7 @@ export async function reportDrawing(
 }
 
 export async function guestLogin(payload: {
-  deviceId?: string
+  deviceToken?: string
   sessionId?: string
 }): Promise<GuestLoginResponse> {
   return request<GuestLoginResponse>('/api/auth/guest/login', {
@@ -257,10 +258,6 @@ export function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
 }
 
-export function generateDeviceId(): string {
-  return `device_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`
-}
-
 /**
  * 从 localStorage 获取或创建会话 ID
  */
@@ -275,15 +272,14 @@ export function getOrCreateSessionId(): string {
   return sessionId
 }
 
-export function getOrCreateDeviceId(): string {
-  if (typeof window === 'undefined') return generateDeviceId()
+export function getGuestDeviceToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(GUEST_DEVICE_TOKEN_STORAGE_KEY)
+}
 
-  let deviceId = localStorage.getItem(DEVICE_ID_STORAGE_KEY)
-  if (!deviceId) {
-    deviceId = generateDeviceId()
-    localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId)
-  }
-  return deviceId
+export function setGuestDeviceToken(deviceToken: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(GUEST_DEVICE_TOKEN_STORAGE_KEY, deviceToken)
 }
 
 export function getAuthToken(): string | null {
@@ -311,8 +307,9 @@ export async function ensureGuestAuth(
     return { token: cachedToken, userId: cachedUserId }
   }
 
-  const deviceId = getOrCreateDeviceId()
-  const resp = await guestLogin({ deviceId, sessionId })
+  const deviceToken = getGuestDeviceToken() || undefined
+  const resp = await guestLogin({ deviceToken, sessionId })
+  setGuestDeviceToken(resp.deviceToken)
   setAuthSession(resp.token, resp.userId)
   return { token: resp.token, userId: resp.userId }
 }

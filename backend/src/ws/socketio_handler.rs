@@ -60,6 +60,7 @@ pub fn on_connect(socket: SocketRef, _state: SioState<Arc<AppState>>) {
     socket.on("room:leave", on_room_leave);
     socket.on("vote:cast", on_vote_cast);
     socket.on("vote:retract", on_vote_retract);
+    // Kept for backward compatibility; currently disabled at handler level.
     socket.on("vote:chase", on_vote_chase);
     socket.on("comment:add", on_comment_add);
     socket.on_disconnect(on_disconnect);
@@ -262,7 +263,7 @@ async fn on_vote_cast(
         }
 
         // 检查游戏结束条件
-        check_game_end(&socket, &state, &room).await;
+        check_game_end(&socket, &state, &room, true).await;
     }
 }
 
@@ -362,12 +363,8 @@ async fn on_vote_retract(
         .emit("vote:update", &vote_update);
 }
 
-/// 追击 (重复投同目标，增加票数)
-async fn on_vote_chase(
-    socket: SocketRef,
-    Data(data): Data<BattleVoteCastData>,
-    state: SioState<Arc<AppState>>,
-) {
+/// 追击能力当前关闭：保留事件名以兼容旧前端，统一返回 `chase_disabled`。
+async fn on_vote_chase(socket: SocketRef, Data(data): Data<BattleVoteCastData>) {
     info!("[Socket.IO] Vote chase: {:?}", data);
 
     let payload = serde_json::json!({
@@ -375,18 +372,22 @@ async fn on_vote_chase(
         "fishId": data.fish_id
     });
     let _ = socket.emit("vote:error", &payload);
-    let _ = state;
 }
 
 /// 检查游戏结束条件
 ///
-/// 游戏结束条件:
-/// 1. 前置检查: total_items <= 5 时不检查（还没有 AI 鱼出现）
-/// 2. 失败条件: 杀了 3 条非 AI 鱼
-/// 3. 失败条件: AI 鱼数量 > 5
-/// 4. 胜利条件: AI 全灭 + 人类 >= 5
-async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
-    // 重新查询最新的 room 数据以获取准确的 total_items
+/// 游戏结束条件（基于当前存活/淘汰统计与配置比例）:
+/// 1. 失败：被淘汰人类达到 `human_eliminated_ratio` 推导阈值
+/// 2. 胜利：AI 全灭，且存活人类达到 `victory_human_survive_ratio` 推导阈值
+/// 3. 失败：AI 相对人类优势超过 `ai_overflow_delta`
+///
+/// `broadcast_phase_update = true` 时，在写入 `rooms.status=gameover` 后立即广播 `phase:update`。
+async fn check_game_end(
+    socket: &SocketRef,
+    state: &AppState,
+    room: &Room,
+    broadcast_phase_update: bool,
+) {
     let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
         .bind(room.id)
         .fetch_one(&state.db)
@@ -453,7 +454,9 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
             .fetch_one(&state.db)
             .await
         {
-            emit_phase_update(socket, &updated_room);
+            if broadcast_phase_update {
+                emit_phase_update(socket, &updated_room);
+            }
         }
         tracing::info!(
             "[Game] Defeat: {} humans killed in room {}",
@@ -485,7 +488,9 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
             .fetch_one(&state.db)
             .await
         {
-            emit_phase_update(socket, &updated_room);
+            if broadcast_phase_update {
+                emit_phase_update(socket, &updated_room);
+            }
         }
         tracing::info!("[Game] Victory in room {}", room.room_code);
     }
@@ -513,7 +518,9 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
             .fetch_one(&state.db)
             .await
         {
-            emit_phase_update(socket, &updated_room);
+            if broadcast_phase_update {
+                emit_phase_update(socket, &updated_room);
+            }
         }
         tracing::info!("[Game] Defeat: AI overrun in room {}", room.room_code);
     }
@@ -776,7 +783,7 @@ async fn phase_tick(socket: &SocketRef, state: &AppState, mut room: Room) -> Opt
             .map(|t| Utc::now() >= t)
             .unwrap_or(false);
         if expired {
-            check_game_end(socket, state, &room).await;
+            check_game_end(socket, state, &room, false).await;
             let refreshed: Room = sqlx::query_as("SELECT * FROM rooms WHERE id = $1")
                 .bind(room.id)
                 .fetch_one(&state.db)
