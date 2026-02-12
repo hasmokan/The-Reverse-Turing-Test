@@ -1,0 +1,19 @@
+{
+  "ver": "1.2.0",
+  "importer": "directory",
+  "imported": true,
+  "uuid": "68af9c9b-91f3-4c97-b2ed-9632c084068f",
+  "files": [],
+  "subMetas": {},
+  "userData": {
+    "isBundle": true,
+    "bundleName": "RemoteUI",
+    "priority": 7,
+    "compressionType": {
+      "web-mobile": "merge_dep",
+      "wechatgame": "merge_dep",
+      "default": "merge_dep"
+    },
+    "isRemote": true
+  }
+}
