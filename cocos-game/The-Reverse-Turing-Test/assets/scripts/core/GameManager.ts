@@ -94,6 +94,10 @@ export class GameManager extends Component {
     private _toasts: ToastMessage[] = [];
     private _toastIdCounter: number = 0;
 
+    // ==================== 可配置阈值 ====================
+
+    private _eliminationThreshold: number = BATTLE_CONSTANTS.ELIMINATION_THRESHOLD;
+
     // ==================== 浮动伤害 ====================
 
     private _floatingDamages: FloatingDamage[] = [];
@@ -138,8 +142,13 @@ export class GameManager extends Component {
     get gameResult(): GameResult | null { return this._gameResult; }
     get eliminationData(): EliminationData | null { return this._eliminationData; }
     get toasts(): ToastMessage[] { return [...this._toasts]; }
+    get eliminationThreshold(): number { return this._eliminationThreshold; }
 
     // ==================== 基础状态操作 ====================
+
+    setEliminationThreshold(threshold: number): void {
+        this._eliminationThreshold = threshold;
+    }
 
     setPhase(phase: GamePhase): void {
         if (this._phase !== phase) {
@@ -308,7 +317,7 @@ export class GameManager extends Component {
         this.events.emit(GameManager.EVENT.VOTES_UPDATED, fishId, count, voters);
 
         // 检查是否达到淘汰阈值
-        if (count >= BATTLE_CONSTANTS.ELIMINATION_THRESHOLD) {
+        if (count >= this._eliminationThreshold) {
             const item = this.getItem(fishId);
             if (item) {
                 this.triggerElimination({
@@ -497,6 +506,7 @@ export class GameManager extends Component {
         this._eliminationData = null;
         this._toasts = [];
         this._floatingDamages = [];
+        this._eliminationThreshold = BATTLE_CONSTANTS.ELIMINATION_THRESHOLD;
     }
 
     // ==================== 工具方法 ====================

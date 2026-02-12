@@ -16,6 +16,16 @@ export enum BattleActionType {
 }
 
 /**
+ * 本地模式回调接口
+ */
+export interface LocalBattleCallbacks {
+    onVote(fishId: string): void;
+    onChase(fishId: string): void;
+    onSwitchTarget(oldFishId: string, newFishId: string): void;
+    onRetractVote(fishId: string): void;
+}
+
+/**
  * 战斗系统
  * 迁移自: frontend/src/hooks/useBattleSystem.ts
  *
@@ -23,6 +33,7 @@ export enum BattleActionType {
  * - 投票/追击/换目标 逻辑
  * - CD 管理
  * - 战斗结果判定
+ * - 本地模式支持（单人游戏）
  */
 @ccclass('BattleSystem')
 export class BattleSystem extends Component {
@@ -32,12 +43,36 @@ export class BattleSystem extends Component {
         return BattleSystem._instance;
     }
 
+    // 本地模式
+    private _localMode: boolean = false;
+    private _localCallbacks: LocalBattleCallbacks | null = null;
+
     onLoad() {
         if (BattleSystem._instance && BattleSystem._instance !== this) {
             this.destroy();
             return;
         }
         BattleSystem._instance = this;
+    }
+
+    /**
+     * 启用本地模式（单人游戏）
+     */
+    enableLocalMode(callbacks: LocalBattleCallbacks): void {
+        this._localMode = true;
+        this._localCallbacks = callbacks;
+    }
+
+    /**
+     * 禁用本地模式
+     */
+    disableLocalMode(): void {
+        this._localMode = false;
+        this._localCallbacks = null;
+    }
+
+    get isLocalMode(): boolean {
+        return this._localMode;
     }
 
     /**
@@ -86,7 +121,11 @@ export class BattleSystem extends Component {
         }
 
         // 发送投票事件
-        SocketClient.instance.castVote(fishId);
+        if (this._localMode && this._localCallbacks) {
+            this._localCallbacks.onVote(fishId);
+        } else {
+            SocketClient.instance.castVote(fishId);
+        }
 
         // 添加浮动伤害
         const item = gm.getItem(fishId);
@@ -116,7 +155,11 @@ export class BattleSystem extends Component {
         gm.chaseFire(fishId);
 
         // 发送追击事件
-        SocketClient.instance.chaseVote(fishId);
+        if (this._localMode && this._localCallbacks) {
+            this._localCallbacks.onChase(fishId);
+        } else {
+            SocketClient.instance.chaseVote(fishId);
+        }
 
         // 添加浮动伤害
         const item = gm.getItem(fishId);
@@ -141,13 +184,21 @@ export class BattleSystem extends Component {
         }
 
         // 撤回旧目标的票
-        SocketClient.instance.retractVote(oldTargetId);
+        if (this._localMode && this._localCallbacks) {
+            this._localCallbacks.onRetractVote(oldTargetId);
+        } else {
+            SocketClient.instance.retractVote(oldTargetId);
+        }
 
         // 更新目标
         gm.changeTarget(newFishId);
 
         // 投给新目标
-        SocketClient.instance.castVote(newFishId);
+        if (this._localMode && this._localCallbacks) {
+            this._localCallbacks.onSwitchTarget(oldTargetId, newFishId);
+        } else {
+            SocketClient.instance.castVote(newFishId);
+        }
 
         // 添加浮动伤害
         const item = gm.getItem(newFishId);
