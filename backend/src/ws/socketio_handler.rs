@@ -1,17 +1,53 @@
 //! Socket.IO 事件处理器
 //! 兼容前端 socket.io-client
 
+use chrono::{Duration, Utc};
 use socketioxide::extract::{Data, SocketRef, State as SioState};
 use std::sync::Arc;
 use tracing::{debug, info};
+use uuid::Uuid;
 
 use crate::models::{drawing_image_url, Drawing, DrawingItemRow, Room, Theme, ThemeResponse};
-use crate::services::AppState;
+use crate::services::{auth, AppState};
+use crate::ws::game_rules;
 
 /// 存储在 socket extensions 中的会话信息
 #[derive(Clone)]
 pub struct RoomSession {
     pub room_code: String,
+}
+
+/// 存储在 socket extensions 中的鉴权信息
+#[derive(Clone)]
+pub struct AuthSession {
+    pub user_id: Uuid,
+}
+
+#[derive(Debug)]
+pub struct WsAuthError(String);
+
+impl std::fmt::Display for WsAuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for WsAuthError {}
+
+pub async fn auth_middleware(
+    socket: SocketRef,
+    state: SioState<Arc<AppState>>,
+    Data(auth_data): Data<ConnectAuthData>,
+) -> Result<(), WsAuthError> {
+    let token = extract_auth_token(&auth_data)
+        .ok_or_else(|| WsAuthError("missing auth token".to_string()))?;
+
+    let user_id = auth::user_id_from_token(&state.db, &token)
+        .await
+        .map_err(|_| WsAuthError("invalid auth token".to_string()))?;
+
+    socket.extensions.insert(AuthSession { user_id });
+    Ok(())
 }
 
 /// Socket.IO 连接处理
@@ -24,6 +60,7 @@ pub fn on_connect(socket: SocketRef, _state: SioState<Arc<AppState>>) {
     socket.on("room:leave", on_room_leave);
     socket.on("vote:cast", on_vote_cast);
     socket.on("vote:retract", on_vote_retract);
+    // Kept for backward compatibility; currently disabled at handler level.
     socket.on("vote:chase", on_vote_chase);
     socket.on("comment:add", on_comment_add);
     socket.on_disconnect(on_disconnect);
@@ -49,6 +86,8 @@ async fn on_room_join(
 
     // 更新在线人数
     update_online_count(&state, room_id, 1).await;
+
+    let _ = phase_tick_by_room_code(&socket, &state, room_id).await;
 
     // 发送房间初始状态
     if let Ok(room_state) = get_room_state(&state, room_id).await {
@@ -89,6 +128,14 @@ async fn on_vote_cast(
     state: SioState<Arc<AppState>>,
 ) {
     info!("[Socket.IO] Vote cast: {:?}", data);
+    let Some(voter_id) = authenticated_voter_id(&socket) else {
+        let payload = serde_json::json!({
+            "reason": "unauthorized",
+            "fishId": data.fish_id
+        });
+        let _ = socket.emit("vote:error", &payload);
+        return;
+    };
 
     let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
         Ok(id) => id,
@@ -114,12 +161,25 @@ async fn on_vote_cast(
         Err(_) => return,
     };
 
+    let room = match phase_tick_by_room_id(&socket, &state, room.id).await {
+        Some(r) => r,
+        None => return,
+    };
+    if room.status != "voting" {
+        let payload = serde_json::json!({
+            "reason": "not_voting",
+            "fishId": data.fish_id
+        });
+        let _ = socket.emit("vote:error", &payload);
+        return;
+    }
+
     // 插入投票记录
     let insert_result = match sqlx::query(
         "INSERT INTO votes (drawing_id, session_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
     )
     .bind(fish_id)
-    .bind(&data.voter_id)
+    .bind(&voter_id)
     .execute(&state.db)
     .await
     {
@@ -163,13 +223,13 @@ async fn on_vote_cast(
     // 通知被投票者 vote:received
     let vote_received = serde_json::json!({
         "fishId": data.fish_id,
-        "voterId": data.voter_id
+        "voterId": voter_id
     });
     let _ = socket
         .within(room.room_code.clone())
         .emit("vote:received", &vote_received);
 
-    let elimination_threshold = room.vote_threshold();
+    let elimination_threshold = room.vote_threshold(&state.config);
     if new_count >= elimination_threshold {
         // 标记为淘汰
         let _ = sqlx::query(
@@ -203,7 +263,7 @@ async fn on_vote_cast(
         }
 
         // 检查游戏结束条件
-        check_game_end(&socket, &state, &room).await;
+        check_game_end(&socket, &state, &room, true).await;
     }
 }
 
@@ -214,17 +274,56 @@ async fn on_vote_retract(
     state: SioState<Arc<AppState>>,
 ) {
     info!("[Socket.IO] Vote retract: {:?}", data);
+    let Some(voter_id) = authenticated_voter_id(&socket) else {
+        let payload = serde_json::json!({
+            "reason": "unauthorized",
+            "fishId": data.fish_id
+        });
+        let _ = socket.emit("vote:error", &payload);
+        return;
+    };
 
     let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
         Ok(id) => id,
         Err(_) => return,
     };
 
+    let drawing = match sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
+        .bind(fish_id)
+        .fetch_optional(&state.db)
+        .await
+    {
+        Ok(Some(d)) => d,
+        _ => return,
+    };
+
+    let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+        .bind(drawing.room_id)
+        .fetch_one(&state.db)
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+
+    let room = match phase_tick_by_room_id(&socket, &state, room.id).await {
+        Some(r) => r,
+        None => return,
+    };
+    if room.status != "voting" {
+        let payload = serde_json::json!({
+            "reason": "not_voting",
+            "fishId": data.fish_id
+        });
+        let _ = socket.emit("vote:error", &payload);
+        return;
+    }
+
     // 删除投票记录
     let delete_result =
         match sqlx::query("DELETE FROM votes WHERE drawing_id = $1 AND session_id = $2")
             .bind(fish_id)
-            .bind(&data.voter_id)
+            .bind(&voter_id)
             .execute(&state.db)
             .await
         {
@@ -247,104 +346,6 @@ async fn on_vote_retract(
         Err(_) => return,
     };
 
-    // 获取房间
-    if let Ok(drawing) = sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
-        .bind(fish_id)
-        .fetch_one(&state.db)
-        .await
-    {
-        if let Ok(room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
-            .bind(drawing.room_id)
-            .fetch_one(&state.db)
-            .await
-        {
-            // 获取剩余投票者
-            let voters: Vec<String> =
-                sqlx::query_scalar("SELECT session_id FROM votes WHERE drawing_id = $1")
-                    .bind(fish_id)
-                    .fetch_all(&state.db)
-                    .await
-                    .unwrap_or_default();
-
-            // 广播更新
-            let vote_update = serde_json::json!({
-                "fishId": data.fish_id,
-                "count": new_count,
-                "voters": voters
-            });
-            let _ = socket
-                .within(room.room_code)
-                .emit("vote:update", &vote_update);
-        }
-    }
-}
-
-/// 追击 (重复投同目标，增加票数)
-async fn on_vote_chase(
-    socket: SocketRef,
-    Data(data): Data<BattleVoteCastData>,
-    state: SioState<Arc<AppState>>,
-) {
-    info!("[Socket.IO] Vote chase: {:?}", data);
-
-    // 解析 fish_id (必须是 UUID 格式，非 UUID 静默忽略)
-    let fish_id = match uuid::Uuid::parse_str(&data.fish_id) {
-        Ok(id) => id,
-        Err(_) => {
-            info!("[Socket.IO] Vote chase: invalid UUID format, ignoring");
-            return;
-        }
-    };
-
-    // 获取 drawing (必须存在且未被淘汰)
-    let drawing = match sqlx::query_as::<_, Drawing>("SELECT * FROM drawings WHERE id = $1")
-        .bind(fish_id)
-        .fetch_optional(&state.db)
-        .await
-    {
-        Ok(Some(d)) if !d.is_eliminated => d,
-        Ok(Some(_)) => {
-            info!("[Socket.IO] Vote chase: drawing already eliminated");
-            return;
-        }
-        Ok(None) => {
-            info!("[Socket.IO] Vote chase: drawing not found");
-            return;
-        }
-        Err(e) => {
-            info!("[Socket.IO] Vote chase: db error: {}", e);
-            return;
-        }
-    };
-
-    // 获取 room
-    let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
-        .bind(drawing.room_id)
-        .fetch_one(&state.db)
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            info!("[Socket.IO] Vote chase: room not found: {}", e);
-            return;
-        }
-    };
-
-    // 增加票数 (不插入投票记录，与 vote:cast 的区别)
-    let new_count: i32 = match sqlx::query_scalar(
-        "UPDATE drawings SET vote_count = vote_count + 1, updated_at = NOW() WHERE id = $1 RETURNING vote_count"
-    )
-    .bind(fish_id)
-    .fetch_one(&state.db)
-    .await {
-        Ok(c) => c,
-        Err(e) => {
-            info!("[Socket.IO] Vote chase: update failed: {}", e);
-            return;
-        }
-    };
-
-    // 获取投票者列表
     let voters: Vec<String> =
         sqlx::query_scalar("SELECT session_id FROM votes WHERE drawing_id = $1")
             .bind(fish_id)
@@ -352,70 +353,41 @@ async fn on_vote_chase(
             .await
             .unwrap_or_default();
 
-    // 广播 vote:update (不是 vote:chase)
     let vote_update = serde_json::json!({
         "fishId": data.fish_id,
         "count": new_count,
         "voters": voters
     });
     let _ = socket
-        .within(room.room_code.clone())
+        .within(room.room_code)
         .emit("vote:update", &vote_update);
+}
 
-    info!(
-        "[Socket.IO] Vote chase: updated count to {} for fish {}",
-        new_count, data.fish_id
-    );
+/// 追击能力当前关闭：保留事件名以兼容旧前端，统一返回 `chase_disabled`。
+async fn on_vote_chase(socket: SocketRef, Data(data): Data<BattleVoteCastData>) {
+    info!("[Socket.IO] Vote chase: {:?}", data);
 
-    let elimination_threshold = room.vote_threshold();
-    if new_count >= elimination_threshold {
-        // 标记为淘汰
-        let _ = sqlx::query(
-            "UPDATE drawings SET is_eliminated = TRUE, eliminated_at = NOW() WHERE id = $1",
-        )
-        .bind(fish_id)
-        .execute(&state.db)
-        .await;
-
-        // 广播 fish:eliminate
-        let eliminate_data = serde_json::json!({
-            "fishId": data.fish_id,
-            "fishName": drawing.name,
-            "isAI": drawing.is_ai,
-            "fishOwnerId": drawing.session_id.unwrap_or_default(),
-            "killerNames": voters
-        });
-        let _ = socket
-            .within(room.room_code.clone())
-            .emit("fish:eliminate", &eliminate_data);
-
-        info!(
-            "[Socket.IO] Vote chase: fish {} eliminated (isAI: {})",
-            data.fish_id, drawing.is_ai
-        );
-
-        // 更新 AI 计数
-        if drawing.is_ai {
-            let _ = sqlx::query("UPDATE rooms SET ai_count = ai_count - 1 WHERE id = $1")
-                .bind(room.id)
-                .execute(&state.db)
-                .await;
-        }
-
-        // 检查游戏结束条件
-        check_game_end(&socket, &state, &room).await;
-    }
+    let payload = serde_json::json!({
+        "reason": "chase_disabled",
+        "fishId": data.fish_id
+    });
+    let _ = socket.emit("vote:error", &payload);
 }
 
 /// 检查游戏结束条件
 ///
-/// 游戏结束条件:
-/// 1. 前置检查: total_items <= 5 时不检查（还没有 AI 鱼出现）
-/// 2. 失败条件: 杀了 3 条非 AI 鱼
-/// 3. 失败条件: AI 鱼数量 > 5
-/// 4. 胜利条件: AI 全灭 + 人类 >= 5
-async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
-    // 重新查询最新的 room 数据以获取准确的 total_items
+/// 游戏结束条件（基于当前存活/淘汰统计与配置比例）:
+/// 1. 失败：被淘汰人类达到 `human_eliminated_ratio` 推导阈值
+/// 2. 胜利：AI 全灭，且存活人类达到 `victory_human_survive_ratio` 推导阈值
+/// 3. 失败：AI 相对人类优势超过 `ai_overflow_delta`
+///
+/// `broadcast_phase_update = true` 时，在写入 `rooms.status=gameover` 后立即广播 `phase:update`。
+async fn check_game_end(
+    socket: &SocketRef,
+    state: &AppState,
+    room: &Room,
+    broadcast_phase_update: bool,
+) {
     let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
         .bind(room.id)
         .fetch_one(&state.db)
@@ -425,23 +397,12 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
         Err(_) => return,
     };
 
-    // ============ 前置检查 ============
-    // 如果总鱼数 <= 5，不允许游戏结束（还没有 AI 鱼）
-    const MIN_ITEMS_FOR_GAME_END: i32 = 6; // 5 条人类鱼 + 至少 1 条 AI 鱼
-    if room.total_items < MIN_ITEMS_FOR_GAME_END {
-        tracing::info!(
-            "[Game] End check skipped: total_items={} < {}",
-            room.total_items,
-            MIN_ITEMS_FOR_GAME_END
-        );
-        return;
-    }
-
     // ============ 获取统计数据 ============
     // 查询存活和淘汰的鱼数量
     #[derive(sqlx::FromRow)]
     struct GameStats {
         ai_alive: i64,
+        ai_eliminated: i64,
         human_alive: i64,
         human_eliminated: i64,
     }
@@ -449,6 +410,7 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
     let stats: Option<GameStats> = sqlx::query_as(
         "SELECT 
             COUNT(*) FILTER (WHERE is_ai = TRUE AND is_eliminated = FALSE) as ai_alive,
+            COUNT(*) FILTER (WHERE is_ai = TRUE AND is_eliminated = TRUE) as ai_eliminated,
             COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = FALSE) as human_alive,
             COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = TRUE) as human_eliminated
          FROM drawings WHERE room_id = $1",
@@ -463,14 +425,22 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
         return;
     };
 
-    // ============ 失败条件 1: 杀了太多人类鱼 ============
-    const MAX_HUMAN_ELIMINATED: i64 = 3;
-    if stats.human_eliminated >= MAX_HUMAN_ELIMINATED {
+    let human_total = stats.human_alive + stats.human_eliminated;
+    let ai_total = stats.ai_alive + stats.ai_eliminated;
+    if ai_total < 1 || human_total < 1 {
+        return;
+    }
+
+    let max_human_eliminated =
+        game_rules::human_eliminated_limit(human_total, state.config.human_eliminated_ratio);
+
+    if stats.human_eliminated >= max_human_eliminated {
         let defeat_data = serde_json::json!({
             "reason": "too_many_human_killed",
             "humanKilled": stats.human_eliminated,
             "aiRemaining": stats.ai_alive,
-            "humanRemaining": stats.human_alive
+            "humanRemaining": stats.human_alive,
+            "humanTotal": human_total
         });
         let _ = socket
             .within(room.room_code.clone())
@@ -479,6 +449,15 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
             .bind(room.id)
             .execute(&state.db)
             .await;
+        if let Ok(updated_room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+            .bind(room.id)
+            .fetch_one(&state.db)
+            .await
+        {
+            if broadcast_phase_update {
+                emit_phase_update(socket, &updated_room);
+            }
+        }
         tracing::info!(
             "[Game] Defeat: {} humans killed in room {}",
             stats.human_eliminated,
@@ -487,17 +466,15 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
         return;
     }
 
-    // ============ 原有逻辑 ============
-    const VICTORY_MIN_HUMAN: i64 = 5;
-    const DEFEAT_AI_COUNT: i64 = 5;
-
-    // 胜利: AI 全灭 + 人类 >= 5
-    if stats.ai_alive == 0 && stats.human_alive >= VICTORY_MIN_HUMAN {
+    let min_human_survive =
+        game_rules::min_human_survive(human_total, state.config.victory_human_survive_ratio);
+    if stats.ai_alive == 0 && stats.human_alive >= min_human_survive {
         let victory_data = serde_json::json!({
             "mvpId": "",
             "mvpName": "Unknown",
             "aiRemaining": stats.ai_alive,
-            "humanRemaining": stats.human_alive
+            "humanRemaining": stats.human_alive,
+            "humanTotal": human_total
         });
         let _ = socket
             .within(room.room_code.clone())
@@ -506,14 +483,28 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
             .bind(room.id)
             .execute(&state.db)
             .await;
+        if let Ok(updated_room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+            .bind(room.id)
+            .fetch_one(&state.db)
+            .await
+        {
+            if broadcast_phase_update {
+                emit_phase_update(socket, &updated_room);
+            }
+        }
         tracing::info!("[Game] Victory in room {}", room.room_code);
     }
-    // 失败: AI > 5
-    else if stats.ai_alive > DEFEAT_AI_COUNT {
+    // 失败: AI 过载（相对优势过大）
+    else if game_rules::ai_overflow(
+        stats.ai_alive,
+        stats.human_alive,
+        state.config.ai_overflow_delta,
+    ) {
         let defeat_data = serde_json::json!({
             "reason": "ai_overrun",
             "aiRemaining": stats.ai_alive,
-            "humanRemaining": stats.human_alive
+            "humanRemaining": stats.human_alive,
+            "humanTotal": human_total
         });
         let _ = socket
             .within(room.room_code.clone())
@@ -522,6 +513,15 @@ async fn check_game_end(socket: &SocketRef, state: &AppState, room: &Room) {
             .bind(room.id)
             .execute(&state.db)
             .await;
+        if let Ok(updated_room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+            .bind(room.id)
+            .fetch_one(&state.db)
+            .await
+        {
+            if broadcast_phase_update {
+                emit_phase_update(socket, &updated_room);
+            }
+        }
         tracing::info!("[Game] Defeat: AI overrun in room {}", room.room_code);
     }
 }
@@ -543,6 +543,15 @@ async fn on_comment_add(socket: SocketRef, Data(data): Data<CommentAddData>) {
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ConnectAuthData {
+    #[serde(default)]
+    token: Option<String>,
+    #[serde(default)]
+    authorization: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RoomJoinData {
     room_id: String,
 }
@@ -557,7 +566,6 @@ struct RoomLeaveData {
 #[serde(rename_all = "camelCase")]
 struct BattleVoteCastData {
     fish_id: String,
-    voter_id: String,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -572,6 +580,76 @@ struct CommentAddData {
 struct CommentData {
     author: String,
     content: String,
+}
+
+fn extract_auth_token(auth: &ConnectAuthData) -> Option<String> {
+    if let Some(token) = auth
+        .token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Some(token.to_string());
+    }
+
+    let authorization = auth
+        .authorization
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+
+    if authorization.len() >= 7 && authorization[..7].eq_ignore_ascii_case("Bearer ") {
+        let bearer = authorization[7..].trim();
+        if bearer.is_empty() {
+            None
+        } else {
+            Some(bearer.to_string())
+        }
+    } else {
+        Some(authorization.to_string())
+    }
+}
+
+fn authenticated_voter_id(socket: &SocketRef) -> Option<String> {
+    socket
+        .extensions
+        .get::<AuthSession>()
+        .map(|session| session.user_id.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_auth_token, ConnectAuthData};
+
+    #[test]
+    fn extract_auth_token_prefers_token_field() {
+        let payload = ConnectAuthData {
+            token: Some("token-123".to_string()),
+            authorization: Some("Bearer ignored".to_string()),
+        };
+
+        assert_eq!(extract_auth_token(&payload), Some("token-123".to_string()));
+    }
+
+    #[test]
+    fn extract_auth_token_supports_bearer_authorization() {
+        let payload = ConnectAuthData {
+            token: None,
+            authorization: Some("Bearer token-xyz".to_string()),
+        };
+
+        assert_eq!(extract_auth_token(&payload), Some("token-xyz".to_string()));
+    }
+
+    #[test]
+    fn extract_auth_token_returns_none_when_missing() {
+        let payload = ConnectAuthData {
+            token: None,
+            authorization: None,
+        };
+
+        assert_eq!(extract_auth_token(&payload), None);
+    }
 }
 
 // === Helper Functions ===
@@ -635,9 +713,185 @@ async fn get_room_state(state: &AppState, room_code: &str) -> Result<SyncStateDa
         total_items: room.total_items,
         ai_count: room.ai_count,
         turbidity: room.turbidity,
+        voting_started_at: room.voting_started_at.map(|t| t.timestamp_millis()),
+        voting_ends_at: room.voting_ends_at.map(|t| t.timestamp_millis()),
+        server_time: Utc::now().timestamp_millis(),
         theme: theme_response,
         items,
     })
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PhaseUpdateData {
+    phase: String,
+    room_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    voting_started_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    voting_ends_at: Option<i64>,
+    server_time: i64,
+}
+
+fn emit_phase_update(socket: &SocketRef, room: &Room) {
+    let payload = PhaseUpdateData {
+        phase: room.status.clone(),
+        room_id: room.room_code.clone(),
+        voting_started_at: room.voting_started_at.map(|t| t.timestamp_millis()),
+        voting_ends_at: room.voting_ends_at.map(|t| t.timestamp_millis()),
+        server_time: Utc::now().timestamp_millis(),
+    };
+    let _ = socket
+        .within(room.room_code.clone())
+        .emit("phase:update", &payload);
+}
+
+async fn phase_tick_by_room_code(
+    socket: &SocketRef,
+    state: &AppState,
+    room_code: &str,
+) -> Option<Room> {
+    let room: Room = sqlx::query_as("SELECT * FROM rooms WHERE room_code = $1")
+        .bind(room_code)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()?;
+    phase_tick(socket, state, room).await
+}
+
+async fn phase_tick_by_room_id(
+    socket: &SocketRef,
+    state: &AppState,
+    room_id: uuid::Uuid,
+) -> Option<Room> {
+    let room: Room = sqlx::query_as("SELECT * FROM rooms WHERE id = $1")
+        .bind(room_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()?;
+    phase_tick(socket, state, room).await
+}
+
+async fn phase_tick(socket: &SocketRef, state: &AppState, mut room: Room) -> Option<Room> {
+    let before_phase = room.status.clone();
+
+    if room.status == "voting" {
+        let expired = room
+            .voting_ends_at
+            .map(|t| Utc::now() >= t)
+            .unwrap_or(false);
+        if expired {
+            check_game_end(socket, state, &room, false).await;
+            let refreshed: Room = sqlx::query_as("SELECT * FROM rooms WHERE id = $1")
+                .bind(room.id)
+                .fetch_one(&state.db)
+                .await
+                .ok()?;
+            if refreshed.status != "gameover" {
+                reset_votes_and_exit_voting(state, refreshed.id).await;
+                room = sqlx::query_as("SELECT * FROM rooms WHERE id = $1")
+                    .bind(refreshed.id)
+                    .fetch_one(&state.db)
+                    .await
+                    .ok()?;
+            } else {
+                room = refreshed;
+            }
+        }
+    }
+
+    if room.status == "active" {
+        #[derive(sqlx::FromRow)]
+        struct AliveStats {
+            ai_alive: i64,
+            human_alive: i64,
+        }
+
+        let stats: AliveStats = sqlx::query_as(
+            "SELECT 
+                COUNT(*) FILTER (WHERE is_ai = TRUE AND is_hidden = FALSE AND is_eliminated = FALSE) as ai_alive,
+                COUNT(*) FILTER (WHERE is_ai = FALSE AND is_hidden = FALSE AND is_eliminated = FALSE) as human_alive
+             FROM drawings WHERE room_id = $1",
+        )
+        .bind(room.id)
+        .fetch_one(&state.db)
+        .await
+        .ok()?;
+
+        let min_humans = state.config.min_humans_to_start_voting.max(1);
+        let submit_deadline =
+            room.created_at + Duration::seconds(state.config.submit_duration_seconds.max(10));
+        let submit_time_up = Utc::now() >= submit_deadline;
+        let should_start = (stats.ai_alive >= 1 && stats.human_alive >= min_humans)
+            || (submit_time_up && stats.ai_alive >= 1 && stats.human_alive >= 1);
+        if should_start {
+            room = start_voting(state, room.id).await.unwrap_or(room);
+        }
+    }
+
+    if before_phase != room.status {
+        emit_phase_update(socket, &room);
+    }
+
+    Some(room)
+}
+
+async fn start_voting(state: &AppState, room_id: uuid::Uuid) -> Option<Room> {
+    let seconds = state.config.voting_duration_seconds.max(5);
+    let updated: Room = sqlx::query_as(
+        "UPDATE rooms
+         SET status = 'voting',
+             voting_started_at = NOW(),
+             voting_ends_at = NOW() + ($2 || ' seconds')::interval,
+             updated_at = NOW()
+         WHERE id = $1 AND status = 'active' AND voting_started_at IS NULL
+         RETURNING *",
+    )
+    .bind(room_id)
+    .bind(seconds)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()?;
+    Some(updated)
+}
+
+async fn reset_votes_and_exit_voting(state: &AppState, room_id: uuid::Uuid) {
+    let mut tx = match state.db.begin().await {
+        Ok(tx) => tx,
+        Err(_) => return,
+    };
+
+    let _ = sqlx::query(
+        "DELETE FROM votes v
+         USING drawings d
+         WHERE v.drawing_id = d.id AND d.room_id = $1",
+    )
+    .bind(room_id)
+    .execute(&mut *tx)
+    .await;
+
+    let _ =
+        sqlx::query("UPDATE drawings SET vote_count = 0, updated_at = NOW() WHERE room_id = $1")
+            .bind(room_id)
+            .execute(&mut *tx)
+            .await;
+
+    let _ = sqlx::query(
+        "UPDATE rooms
+         SET status = 'active',
+             voting_started_at = NULL,
+             voting_ends_at = NULL,
+             updated_at = NOW()
+         WHERE id = $1 AND status = 'voting'",
+    )
+    .bind(room_id)
+    .execute(&mut *tx)
+    .await;
+
+    let _ = tx.commit().await;
 }
 
 /// 更新在线人数
@@ -666,6 +920,11 @@ struct SyncStateData {
     total_items: i32,
     ai_count: i32,
     turbidity: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    voting_started_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    voting_ends_at: Option<i64>,
+    server_time: i64,
     theme: ThemeResponse,
     items: Vec<GameItemData>,
 }

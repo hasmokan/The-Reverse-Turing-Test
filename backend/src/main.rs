@@ -3,6 +3,7 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
+use socketioxide::handler::ConnectHandler;
 use socketioxide::SocketIo;
 use sqlx::postgres::PgPoolOptions;
 use std::{net::SocketAddr, sync::Arc};
@@ -68,7 +69,10 @@ async fn main() -> Result<()> {
     let (sio_layer, io) = SocketIo::builder().with_state(state.clone()).build_layer();
 
     // 注册 Socket.IO 事件处理器
-    io.ns("/", ws::socketio_handler::on_connect);
+    io.ns(
+        "/",
+        ws::socketio_handler::on_connect.with(ws::socketio_handler::auth_middleware),
+    );
 
     // CORS 配置
     let cors = CorsLayer::new()
@@ -128,6 +132,7 @@ fn api_routes(state: Arc<AppState>, io: SocketIo) -> Router {
             post(routes::drawings::report_drawing),
         )
         .route("/auth/wechat_mp/login", post(routes::auth::wechat_mp_login))
+        .route("/auth/guest/login", post(routes::auth::guest_login))
         .route("/auth/dev/login", post(routes::dev_auth::dev_login))
         .route("/auth/me", get(routes::auth::me))
         .route("/auth/logout", post(routes::auth::logout))

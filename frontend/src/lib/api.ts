@@ -6,6 +6,9 @@
 import { ENV_CONFIG } from '@/config/env'
 
 const API_BASE = ENV_CONFIG.API_URL
+const GUEST_DEVICE_TOKEN_STORAGE_KEY = 'mimic_guest_device_token'
+const AUTH_TOKEN_STORAGE_KEY = 'mimic_auth_token'
+const AUTH_USER_ID_STORAGE_KEY = 'mimic_auth_user_id'
 
 // ============ 类型定义 ============
 
@@ -81,6 +84,14 @@ export interface VoteResponse {
 export interface ReportResponse {
   report_count: number
   hidden: boolean
+}
+
+export interface GuestLoginResponse {
+  token: string
+  userId: string
+  isNewUser: boolean
+  isGuest: boolean
+  deviceToken: string
 }
 
 // ============ API 函数 ============
@@ -214,6 +225,16 @@ export async function reportDrawing(
   })
 }
 
+export async function guestLogin(payload: {
+  deviceToken?: string
+  sessionId?: string
+}): Promise<GuestLoginResponse> {
+  return request<GuestLoginResponse>('/api/auth/guest/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 // ============ 健康检查 ============
 
 /**
@@ -249,6 +270,48 @@ export function getOrCreateSessionId(): string {
     localStorage.setItem('mimic_session_id', sessionId)
   }
   return sessionId
+}
+
+export function getGuestDeviceToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(GUEST_DEVICE_TOKEN_STORAGE_KEY)
+}
+
+export function setGuestDeviceToken(deviceToken: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(GUEST_DEVICE_TOKEN_STORAGE_KEY, deviceToken)
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+}
+
+export function getAuthUserId(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(AUTH_USER_ID_STORAGE_KEY)
+}
+
+export function setAuthSession(token: string, userId: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+  localStorage.setItem(AUTH_USER_ID_STORAGE_KEY, userId)
+}
+
+export async function ensureGuestAuth(
+  sessionId?: string
+): Promise<{ token: string; userId: string }> {
+  const cachedToken = getAuthToken()
+  const cachedUserId = getAuthUserId()
+  if (cachedToken && cachedUserId) {
+    return { token: cachedToken, userId: cachedUserId }
+  }
+
+  const deviceToken = getGuestDeviceToken() || undefined
+  const resp = await guestLogin({ deviceToken, sessionId })
+  setGuestDeviceToken(resp.deviceToken)
+  setAuthSession(resp.token, resp.userId)
+  return { token: resp.token, userId: resp.userId }
 }
 
 /**

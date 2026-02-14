@@ -12,6 +12,7 @@ import SubmitForm from '@/components/ui/SubmitForm'
 import { ItemDetailModal, VotingTimer } from '@/components/voting/ItemDetailModal'
 import {
   createDrawing,
+  ensureGuestAuth,
   voteDrawing,
   getOrCreateSessionId,
 } from '@/lib/api'
@@ -82,6 +83,7 @@ export default function GamePage() {
   const [showItemModal, setShowItemModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [sessionId, setSessionId] = useState<string>('')
+  const [authToken, setAuthToken] = useState<string>('')
   const [isExporting, setIsExporting] = useState(false) // 导出图片 loading 状态
   // 使用固定初始值避免 SSR/CSR hydration 不匹配
   const [loadingTip, setLoadingTip] = useState(LOADING_TIPS[0]) // 加载提示轮播
@@ -100,11 +102,30 @@ export default function GamePage() {
     return () => clearInterval(interval)
   }, [isSynced])
 
-  // 初始化 session ID
+  // 初始化 session ID + 游客身份
   useEffect(() => {
-    const id = getOrCreateSessionId()
-    setSessionId(id)
-    setPlayerId(id) // 设置玩家 ID
+    let cancelled = false
+
+    const initIdentity = async () => {
+      const id = getOrCreateSessionId()
+      if (cancelled) return
+      setSessionId(id)
+
+      try {
+        const auth = await ensureGuestAuth(id)
+        if (cancelled) return
+        setAuthToken(auth.token)
+        setPlayerId(auth.userId)
+      } catch (err) {
+        console.error('Failed to initialize guest auth:', err)
+      }
+    }
+
+    initIdentity()
+
+    return () => {
+      cancelled = true
+    }
   }, [setPlayerId])
 
   // 刷新页面时，如果没有 roomId，重定向到首页
@@ -117,7 +138,8 @@ export default function GamePage() {
   // 连接 WebSocket
   const { submitComment, emit, battleVote, retractVote, chaseVote } = useWebSocket({
     roomId: roomId || '',
-    enabled: !!roomId,
+    authToken,
+    enabled: !!roomId && !!authToken,
   })
 
   // 战斗系统

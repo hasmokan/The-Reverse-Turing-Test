@@ -80,7 +80,6 @@ export interface DrawingState {
 // 投票
 export interface VotePayload {
   itemId: string
-  voterId: string
 }
 
 // WebSocket 事件

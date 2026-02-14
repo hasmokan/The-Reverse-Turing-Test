@@ -10,11 +10,19 @@ use crate::services::ApiError;
 
 pub const PROVIDER_WECHAT_MINIPROGRAM: &str = "wechat_miniprogram";
 pub const PROVIDER_DEV: &str = "dev";
+pub const PROVIDER_GUEST_DEVICE: &str = "guest_device";
 
 pub struct LoginResult {
     pub token: String,
     pub user_id: Uuid,
     pub is_new_user: bool,
+}
+
+pub struct GuestLoginResult {
+    pub token: String,
+    pub user_id: Uuid,
+    pub is_new_user: bool,
+    pub device_token: String,
 }
 
 pub struct WechatSession {
@@ -34,6 +42,25 @@ fn generate_token() -> String {
     let mut bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn is_valid_guest_device_token(token: &str) -> bool {
+    token.len() <= 120
+        && token.starts_with("guest_device:")
+        && token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '-' || c == '_')
+}
+
+fn normalize_guest_openid(device_token: Option<&str>) -> String {
+    if let Some(device_token) = device_token {
+        let trimmed = device_token.trim();
+        if !trimmed.is_empty() && is_valid_guest_device_token(trimmed) {
+            return trimmed.to_string();
+        }
+    }
+
+    format!("guest_device:{}", Uuid::new_v4())
 }
 
 async fn wechat_code_to_session(config: &Config, code: &str) -> Result<WechatSession, ApiError> {
@@ -267,6 +294,79 @@ pub async fn login_dev(
     })
 }
 
+pub async fn login_guest_device(
+    db: &PgPool,
+    config: &Config,
+    device_token: Option<&str>,
+    legacy_session_id: Option<&str>,
+) -> Result<GuestLoginResult, ApiError> {
+    let appid = "standalone";
+    let openid = normalize_guest_openid(device_token);
+
+    let mut tx = db.begin().await?;
+
+    let existing_user_id: Option<Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT user_id
+        FROM auth_identities
+        WHERE provider = $1 AND appid = $2 AND openid = $3
+        "#,
+    )
+    .bind(PROVIDER_GUEST_DEVICE)
+    .bind(appid)
+    .bind(&openid)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (user_id, is_new_user) = if let Some(user_id) = existing_user_id {
+        (user_id, false)
+    } else {
+        let user_id: Uuid = sqlx::query_scalar("INSERT INTO users DEFAULT VALUES RETURNING id")
+            .fetch_one(&mut *tx)
+            .await?;
+
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO auth_identities (user_id, provider, appid, openid, unionid)
+            VALUES ($1, $2, $3, $4, NULL)
+            "#,
+        )
+        .bind(user_id)
+        .bind(PROVIDER_GUEST_DEVICE)
+        .bind(appid)
+        .bind(&openid)
+        .execute(&mut *tx)
+        .await?;
+
+        (user_id, true)
+    };
+
+    let token = generate_token();
+    let expires_at = Utc::now() + Duration::days(config.auth_token_ttl_days);
+
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO auth_sessions (token, user_id, legacy_session_id, expires_at)
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind(&token)
+    .bind(user_id)
+    .bind(legacy_session_id)
+    .bind(expires_at)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(GuestLoginResult {
+        token,
+        user_id,
+        is_new_user,
+        device_token: openid,
+    })
+}
+
 pub async fn user_id_from_token(db: &PgPool, token: &str) -> Result<Uuid, ApiError> {
     let user_id: Option<Uuid> = sqlx::query_scalar(
         r#"
@@ -317,4 +417,36 @@ pub async fn list_identities_for_user(
     .fetch_all(db)
     .await?;
     Ok(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_valid_guest_device_token, normalize_guest_openid};
+
+    #[test]
+    fn normalize_guest_openid_accepts_existing_server_token() {
+        let openid = normalize_guest_openid(Some("  guest_device:abc-123  "));
+        assert_eq!(openid, "guest_device:abc-123");
+    }
+
+    #[test]
+    fn normalize_guest_openid_rejects_plain_device_id_and_generates_server_token() {
+        let openid = normalize_guest_openid(Some("ios-device-raw-id"));
+        assert!(openid.starts_with("guest_device:"));
+        assert_ne!(openid, "ios-device-raw-id");
+    }
+
+    #[test]
+    fn normalize_guest_openid_falls_back_to_generated_server_token_for_empty_input() {
+        let openid = normalize_guest_openid(Some("   "));
+        assert!(openid.starts_with("guest_device:"));
+        assert!(openid.len() > "guest_device:".len());
+    }
+
+    #[test]
+    fn validate_guest_device_token_format() {
+        assert!(is_valid_guest_device_token("guest_device:ok-123_abc"));
+        assert!(!is_valid_guest_device_token("device_123"));
+        assert!(!is_valid_guest_device_token("guest_device:contains space"));
+    }
 }

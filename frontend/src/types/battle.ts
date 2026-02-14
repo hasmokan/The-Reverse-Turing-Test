@@ -87,17 +87,14 @@ export type BattleWSEventType =
 // 投票事件数据 (前端 → 后端)
 export interface VoteCastData {
   fishId: string
-  voterId: string
 }
 
 export interface VoteRetractData {
   fishId: string
-  voterId: string
 }
 
 export interface VoteChaseData {
   fishId: string
-  voterId: string
 }
 
 // 投票更新事件数据 (后端 → 前端)

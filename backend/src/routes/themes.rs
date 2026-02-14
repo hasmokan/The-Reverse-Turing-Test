@@ -48,7 +48,7 @@ pub async fn get_or_create_room_by_theme(
 
     // 查找该主题已有的活跃房间
     let existing_room: Option<Room> = sqlx::query_as(
-        "SELECT r.* FROM rooms r WHERE r.theme_id = $1 AND r.status = 'active' ORDER BY r.created_at DESC LIMIT 1"
+        "SELECT r.* FROM rooms r WHERE r.theme_id = $1 AND r.status IN ('active', 'voting') ORDER BY r.created_at DESC LIMIT 1"
     )
     .bind(theme.id)
     .fetch_optional(&state.db)
