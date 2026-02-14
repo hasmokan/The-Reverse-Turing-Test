@@ -5,7 +5,7 @@ import {
 import { GameManager } from '../core/GameManager';
 import { BattleSystem, LocalBattleCallbacks } from './BattleSystem';
 import { AISpawner } from './AISpawner';
-import { KillFeedManager } from '../ui/KillFeedManager';
+import { KillFeedManager } from '../ui/single-player/KillFeedManager';
 import { GamePhase, EliminationData, ToastType } from '../data/GameTypes';
 import { BATTLE_CONSTANTS } from '../data/GameConstants';
 

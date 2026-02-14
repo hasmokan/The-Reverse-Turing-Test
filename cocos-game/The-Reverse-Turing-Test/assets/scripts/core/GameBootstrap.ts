@@ -1,6 +1,6 @@
 import { _decorator, Component, Node, Sprite, director, Color, find } from 'cc';
 import { ResourceLoader } from './ResourceLoader';
-import { LoadingScreen } from '../ui/LoadingScreen';
+import { LoadingScreen } from '../ui/common/LoadingScreen';
 import { ResourceConfig } from './ResourceConfig';
 
 const { ccclass, property } = _decorator;
