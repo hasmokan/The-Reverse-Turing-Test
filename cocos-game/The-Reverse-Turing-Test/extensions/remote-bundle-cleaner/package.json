@@ -1,0 +1,11 @@
+{
+    "package_version": 2,
+    "name": "remote-bundle-cleaner",
+    "version": "1.0.0",
+    "editor": ">=3.8.6",
+    "description": "构建后自动清理远程 Asset Bundle 的本地 native 资源，减少包体积",
+    "main": "./dist/main.js",
+    "contributions": {
+        "builder": "./dist/hooks.js"
+    }
+}

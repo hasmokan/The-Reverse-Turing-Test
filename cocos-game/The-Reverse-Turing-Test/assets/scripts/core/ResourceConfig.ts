@@ -36,6 +36,7 @@ export class ResourceConfig {
         'icon_gear2': '灰色齿轮图标2',
         'icon_brain': '肉色大脑图标',
         'icon_bulb': '黄色灯泡图标',
+        'back_btn': 'BackButton',
     };
 
     /**
@@ -110,7 +111,7 @@ export class ResourceConfig {
         {
             key: 'icon_bulb',
             bundlePath: 'icon_bulb/spriteFrame',
-            remoteUrl: `${ResourceConfig.COS_BASE_URL}/%E9%BB%84%E8%89%B2%E7%81%AF%E6%B3%A1%E5%9B%BE%E6%A0%87.png`,
+            remoteUrl: `${ResourceConfig.COS_BASE_URL}/%EQ9%BB%84%E8%89%B2%E7%81%AF%E6%B3%A1%E5%9B%BE%E6%A0%87.png`,
             type: 'image',
             preload: true
         },
@@ -118,6 +119,13 @@ export class ResourceConfig {
             key: 'game_bg',
             bundlePath: 'game_bg/spriteFrame',
             remoteUrl: `${ResourceConfig.COS_BASE_URL}/9_16_hand-drawn_grid_canvas.png`,
+            type: 'image',
+            preload: true
+        },
+        {
+            key: 'back_btn',
+            bundlePath: 'back_btn/spriteFrame',
+            remoteUrl: `${ResourceConfig.COS_BASE_URL}/%E8%BF%94%E5%9B%9E%E6%8C%89%E9%92%AE4.png`,
             type: 'image',
             preload: true
         },

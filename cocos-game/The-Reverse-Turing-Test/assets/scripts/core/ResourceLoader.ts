@@ -1,4 +1,4 @@
-import { _decorator, Component, assetManager, ImageAsset, SpriteFrame, Texture2D, AssetManager, error, log } from 'cc';
+import { _decorator, Component, assetManager, ImageAsset, SpriteFrame, Texture2D, AssetManager, error, log, sys } from 'cc';
 import { ResourceConfig, RemoteResource } from './ResourceConfig';
 
 const { ccclass } = _decorator;
@@ -23,9 +23,9 @@ export interface LoadResult {
 /**
  * 资源加载管理器
  *
- * 加载策略：
- * 1. 优先通过 Asset Bundle 加载（资源在 RemoteUI bundle 中）
- * 2. 若 Bundle 加载失败，fallback 到远程 URL 加载
+ * 加载策略（分环境）：
+ * - 浏览器/开发环境：优先通过 Asset Bundle 加载，失败则 fallback 远程 URL
+ * - 微信小游戏：直接从远程 COS URL 加载（构建时 native/ 已清理以控制包体大小）
  */
 @ccclass('ResourceLoader')
 export class ResourceLoader extends Component {
@@ -40,13 +40,27 @@ export class ResourceLoader extends Component {
     // 已加载的 Bundle 实例
     private _bundle: AssetManager.Bundle | null = null;
 
+    // Bundle 单资源加载超时时间（毫秒）
+    private static readonly BUNDLE_LOAD_TIMEOUT = 5000;
+
+    // 远程 URL 加载超时时间（毫秒）
+    private static readonly REMOTE_LOAD_TIMEOUT = 15000;
+
     public static get instance(): ResourceLoader {
         return this._instance;
     }
 
+    /**
+     * 检测是否为微信小游戏环境
+     */
+    private static _isWeChatMiniGame(): boolean {
+        return sys.platform === sys.Platform.WECHAT_GAME;
+    }
+
     onLoad() {
         ResourceLoader._instance = this;
-        log('[ResourceLoader] 资源加载器已初始化');
+        const env = ResourceLoader._isWeChatMiniGame() ? '微信小游戏' : '浏览器';
+        log(`[ResourceLoader] 资源加载器已初始化 (${env}环境)`);
     }
 
     /**
@@ -94,8 +108,12 @@ export class ResourceLoader extends Component {
 
         log(`[ResourceLoader] 开始预加载 ${resources.length} 个资源`);
 
-        // 优先尝试加载 Bundle
-        await this.loadBundle();
+        // 仅在非微信环境下加载 Bundle（微信环境 native/ 已清理，直接走远程 URL）
+        if (!ResourceLoader._isWeChatMiniGame()) {
+            await this.loadBundle();
+        } else {
+            log('[ResourceLoader] 微信小游戏环境，跳过 Bundle 加载，直接使用远程 URL');
+        }
 
         const result: LoadResult = {
             success: true,
@@ -167,10 +185,19 @@ export class ResourceLoader extends Component {
     }
 
     /**
-     * 实际加载逻辑：Bundle 优先，URL fallback
+     * 实际加载逻辑
+     * - 微信小游戏：直接从远程 COS URL 加载（构建时 native/ 已清理）
+     * - 浏览器：Bundle 优先，失败则 fallback 远程 URL
      */
     private async _doLoad(resource: RemoteResource): Promise<SpriteFrame | null> {
-        // 策略一：从 Bundle 加载
+        // 微信小游戏环境：直接从远程 URL 加载
+        // 构建时已通过 build-helper 清理 native/ 目录，bundle.load() 会因缺少 native 文件而挂起
+        if (ResourceLoader._isWeChatMiniGame()) {
+            log(`[ResourceLoader] 远程加载: ${resource.key}`);
+            return this._loadFromRemoteUrl(resource.remoteUrl, resource.key);
+        }
+
+        // 浏览器/开发环境：Bundle 优先
         if (this._bundle) {
             const spriteFrame = await this._loadFromBundle(resource.bundlePath, resource.key);
             if (spriteFrame) {
@@ -179,12 +206,12 @@ export class ResourceLoader extends Component {
             log(`[ResourceLoader] Bundle 加载失败，尝试远程 URL: ${resource.key}`);
         }
 
-        // 策略二：fallback 到远程 URL
+        // fallback 到远程 URL
         return this._loadFromRemoteUrl(resource.remoteUrl, resource.key);
     }
 
     /**
-     * 从 Bundle 加载 SpriteFrame
+     * 从 Bundle 加载 SpriteFrame（带超时保护）
      */
     private _loadFromBundle(bundlePath: string, cacheKey: string): Promise<SpriteFrame | null> {
         return new Promise((resolve) => {
@@ -193,7 +220,22 @@ export class ResourceLoader extends Component {
                 return;
             }
 
+            let resolved = false;
+
+            // 超时保护：防止 bundle.load() 因缺少 native 文件而永远不回调
+            const timer = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    log(`[ResourceLoader] Bundle 加载超时: ${bundlePath}`);
+                    resolve(null);
+                }
+            }, ResourceLoader.BUNDLE_LOAD_TIMEOUT);
+
             this._bundle.load(bundlePath, SpriteFrame, (err, spriteFrame) => {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(timer);
+
                 if (err) {
                     error(`[ResourceLoader] Bundle 资源加载失败: ${bundlePath}`, err);
                     resolve(null);
@@ -207,14 +249,29 @@ export class ResourceLoader extends Component {
     }
 
     /**
-     * 从远程 URL 加载图片（fallback 方式）
+     * 从远程 URL 加载图片（带超时保护）
      */
     private _loadFromRemoteUrl(url: string, cacheKey: string): Promise<SpriteFrame | null> {
         return new Promise((resolve) => {
             const cleanUrl = url.split('?')[0];
             const ext = cleanUrl.match(/\.(png|jpg|jpeg|webp)$/i)?.[0] || '.png';
 
+            let resolved = false;
+
+            // 超时保护
+            const timer = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    error(`[ResourceLoader] 远程加载超时 (${ResourceLoader.REMOTE_LOAD_TIMEOUT}ms): ${cacheKey}`);
+                    resolve(null);
+                }
+            }, ResourceLoader.REMOTE_LOAD_TIMEOUT);
+
             assetManager.loadRemote<ImageAsset>(url, { ext }, (err, imageAsset) => {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(timer);
+
                 if (err) {
                     error(`[ResourceLoader] 远程图片加载失败: ${url}`, err);
                     resolve(null);
