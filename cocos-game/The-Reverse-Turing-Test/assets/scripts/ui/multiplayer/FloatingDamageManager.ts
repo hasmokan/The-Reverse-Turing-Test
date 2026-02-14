@@ -1,8 +1,8 @@
 import { _decorator, Component, Node, Label, Prefab, instantiate,
          tween, Vec3, UIOpacity, Color, Pool } from 'cc';
-import { GameManager } from '../core/GameManager';
-import { FloatingDamage } from '../data/GameTypes';
-import { UI_CONFIG, ANIMATION_DURATION } from '../data/GameConstants';
+import { GameManager } from '../../core/GameManager';
+import { FloatingDamage } from '../../data/GameTypes';
+import { UI_CONFIG, ANIMATION_DURATION } from '../../data/GameConstants';
 
 const { ccclass, property } = _decorator;
 

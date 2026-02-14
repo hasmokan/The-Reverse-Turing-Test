@@ -1,7 +1,7 @@
 import { _decorator, Component, Node, Label, Sprite, Button, Color,
          tween, Vec3, UIOpacity, ParticleSystem2D } from 'cc';
-import { GameManager } from '../core/GameManager';
-import { GameResult, GamePhase, ToastType } from '../data/GameTypes';
+import { GameManager } from '../../core/GameManager';
+import { GameResult, GamePhase, ToastType } from '../../data/GameTypes';
 
 const { ccclass, property } = _decorator;
 

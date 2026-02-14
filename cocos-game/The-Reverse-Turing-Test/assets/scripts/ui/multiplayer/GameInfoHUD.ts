@@ -1,7 +1,7 @@
 import { _decorator, Component, Node, Label, Sprite, Color, tween, Vec3, ProgressBar } from 'cc';
-import { GameManager } from '../core/GameManager';
-import { GamePhase } from '../data/GameTypes';
-import { BATTLE_CONSTANTS } from '../data/GameConstants';
+import { GameManager } from '../../core/GameManager';
+import { GamePhase } from '../../data/GameTypes';
+import { BATTLE_CONSTANTS } from '../../data/GameConstants';
 
 const { ccclass, property } = _decorator;
 

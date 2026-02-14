@@ -1,5 +1,5 @@
 import { _decorator, Component, Button } from 'cc';
-import { SceneTransition, TransitionType } from '../core/SceneTransition';
+import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 const { ccclass, property } = _decorator;
 
 /**

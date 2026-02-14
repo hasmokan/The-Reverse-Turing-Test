@@ -1,9 +1,9 @@
 import { _decorator, Component, Node, Label, Sprite, Button, Color,
          tween, Vec3, UIOpacity, SpriteFrame, Texture2D, ImageAsset } from 'cc';
-import { GameManager } from '../core/GameManager';
-import { BattleSystem, BattleActionType } from '../game/BattleSystem';
-import { GameItem, ToastType } from '../data/GameTypes';
-import { BATTLE_CONSTANTS } from '../data/GameConstants';
+import { GameManager } from '../../core/GameManager';
+import { BattleSystem, BattleActionType } from '../../game/BattleSystem';
+import { GameItem, ToastType } from '../../data/GameTypes';
+import { BATTLE_CONSTANTS } from '../../data/GameConstants';
 
 const { ccclass, property } = _decorator;
 

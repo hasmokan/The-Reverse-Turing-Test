@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Label, Sprite, Color, tween, Vec3, UIOpacity } from 'cc';
-import { BATTLE_CONSTANTS } from '../data/GameConstants';
+import { BATTLE_CONSTANTS } from '../../data/GameConstants';
 
 const { ccclass, property } = _decorator;
 

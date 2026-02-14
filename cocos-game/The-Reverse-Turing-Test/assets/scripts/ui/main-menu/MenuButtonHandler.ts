@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Button } from 'cc';
-import { SceneTransition, TransitionType } from '../core/SceneTransition';
+import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 const { ccclass, property } = _decorator;
 
 /**
@@ -47,7 +47,7 @@ export class MenuButtonHandler extends Component {
 
         // 使用淡入淡出效果切换到单人游戏场景
         if (SceneTransition.instance) {
-            SceneTransition.instance.loadScene('SinglePlayerScene', TransitionType.FADE, 0.8);
+            SceneTransition.instance.loadScene('MultiPlayerScene', TransitionType.FADE, 0.8);
         }
     }
 

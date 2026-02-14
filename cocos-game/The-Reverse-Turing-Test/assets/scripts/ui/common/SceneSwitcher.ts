@@ -1,5 +1,5 @@
 import { _decorator, Component, Button } from 'cc';
-import { SceneTransition, TransitionType } from '../core/SceneTransition';
+import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 
 const { ccclass, property } = _decorator;
 
@@ -12,8 +12,8 @@ export class SceneSwitcher extends Component {
     @property({ type: String })
     targetScene: string = '';
 
-    @property({ type: TransitionType })
-    transitionType: TransitionType = TransitionType.FADE;
+    @property({ type: String, tooltip: '转场类型: fade / slide_left / slide_right / zoom / circle' })
+    transitionType: string = TransitionType.FADE;
 
     @property({ type: Number })
     transitionDuration: number = 0.5;
@@ -46,7 +46,7 @@ export class SceneSwitcher extends Component {
         console.log(`切换到场景: ${this.targetScene}`);
         SceneTransition.instance.loadScene(
             this.targetScene,
-            this.transitionType,
+            this.transitionType as TransitionType,
             this.transitionDuration
         );
     }
@@ -62,7 +62,7 @@ export class SceneSwitcher extends Component {
 
         SceneTransition.instance.loadScene(
             sceneName,
-            type || this.transitionType,
+            type || this.transitionType as TransitionType,
             duration || this.transitionDuration
         );
     }

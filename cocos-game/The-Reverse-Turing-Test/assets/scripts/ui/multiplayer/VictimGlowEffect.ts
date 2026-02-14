@@ -1,7 +1,7 @@
 import {
     _decorator, Component, Sprite, UIOpacity, Color, tween, UITransform, Size
 } from 'cc';
-import { GameManager } from '../core/GameManager';
+import { GameManager } from '../../core/GameManager';
 
 const { ccclass } = _decorator;
 

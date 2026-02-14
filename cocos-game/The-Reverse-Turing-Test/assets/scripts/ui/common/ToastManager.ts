@@ -1,7 +1,7 @@
 import { _decorator, Component, Node, Prefab, instantiate, Label, Sprite, Color, tween, Vec3, UIOpacity } from 'cc';
-import { GameManager } from '../core/GameManager';
-import { ToastMessage, ToastType } from '../data/GameTypes';
-import { UI_CONFIG } from '../data/GameConstants';
+import { GameManager } from '../../core/GameManager';
+import { ToastMessage, ToastType } from '../../data/GameTypes';
+import { UI_CONFIG } from '../../data/GameConstants';
 
 const { ccclass, property } = _decorator;
 

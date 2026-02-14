@@ -3,7 +3,7 @@ import { _decorator, Component, Node, Sprite, SpriteFrame, UITransform,
 import { GameManager } from '../core/GameManager';
 import { GameItem, ToastType } from '../data/GameTypes';
 import { PHYSICS_CONFIG, BATTLE_CONSTANTS } from '../data/GameConstants';
-import { VoteDisplay } from '../ui/single-player/VoteDisplay';
+import { VoteDisplay } from '../ui/multiplayer/VoteDisplay';
 
 const { ccclass, property } = _decorator;
 
