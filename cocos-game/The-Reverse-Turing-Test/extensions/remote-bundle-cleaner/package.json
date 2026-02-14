@@ -6,6 +6,6 @@
     "description": "构建后自动清理远程 Asset Bundle 的本地 native 资源，减少包体积",
     "main": "./dist/main.js",
     "contributions": {
-        "builder": "./dist/hooks.js"
+        "builder": "./dist/builder"
     }
 }
