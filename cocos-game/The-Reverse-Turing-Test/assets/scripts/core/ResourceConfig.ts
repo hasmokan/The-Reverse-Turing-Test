@@ -111,7 +111,7 @@ export class ResourceConfig {
         {
             key: 'icon_bulb',
             bundlePath: 'icon_bulb/spriteFrame',
-            remoteUrl: `${ResourceConfig.COS_BASE_URL}/%EQ9%BB%84%E8%89%B2%E7%81%AF%E6%B3%A1%E5%9B%BE%E6%A0%87.png`,
+            remoteUrl: `${ResourceConfig.COS_BASE_URL}/%E9%BB%84%E8%89%B2%E7%81%AF%E6%B3%A1%E5%9B%BE%E6%A0%87.png`,
             type: 'image',
             preload: true
         },

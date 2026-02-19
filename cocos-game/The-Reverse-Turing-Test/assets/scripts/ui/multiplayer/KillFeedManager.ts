@@ -7,24 +7,20 @@ const { ccclass, property } = _decorator;
 
 // 抓到AI的俏皮话
 const AI_KILL_MESSAGES: string[] = [
-    '火眼金睛！这条AI鱼被你揪出来了 🎯',
-    '好眼力！假鱼无处遁形 👀',
-    '又一条AI落网，你是捕鱼达人！🐟',
-    '精准打击！AI鱼原形毕露 💥',
-    '厉害了！这都能看出来 🏆',
-    '一眼真一眼假，你选对了！✨',
-    'AI画师哭晕在厕所 😭',
-    '鉴鱼大师实锤了！🔍',
+    '🤖 抓到了！[Name] 是一条假鱼！',
+    '⚡ 核心击破！[Name] 已被移除。',
+    '🐛 [Name] 是个 Bug，已被修复。',
+    '🚫 拒绝合成肉！[Name] 被丢出了鱼缸。',
+    '✅ [Name] 原形毕露！',
 ];
 
 // 误杀人类的文案
 const HUMAN_KILL_MESSAGES: string[] = [
-    '糟糕！这是人类画的鱼啊... 😱',
-    '冤枉好鱼了！这可是真迹 💔',
-    '误伤友军！小心点啊 ⚠️',
-    '这条是人画的...眼神不太好使？👓',
-    '友军倒下了，注意甄别！😰',
-    '真鱼被你送走了...心疼 💧',
+    '😭 误杀！[Name] 是真的人类啊！',
+    '💀 [Name] 画得太丑被当成 AI 抓走了...',
+    '🥀 痛失队友！[Name] 离开了我们。',
+    '🤷‍♂️ [Name]：我真的是人...(遗言)',
+    '☠️ [Name] 惨遭献祭...',
 ];
 
 /**
@@ -51,7 +47,7 @@ export class KillFeedManager extends Component {
         }
 
         const messages = isAI ? AI_KILL_MESSAGES : HUMAN_KILL_MESSAGES;
-        const message = messages[Math.floor(Math.random() * messages.length)];
+        const message = messages[Math.floor(Math.random() * messages.length)].replace('[Name]', fishName);
         const bgColor = isAI ? new Color(34, 139, 34, 220) : new Color(220, 50, 50, 220);
 
         // 创建消息节点
@@ -72,7 +68,7 @@ export class KillFeedManager extends Component {
         const textNode = new Node('Text');
         feedNode.addChild(textNode);
         const label = textNode.addComponent(Label);
-        label.string = `「${fishName}」${isAI ? '被淘汰！' : '被误杀...'} ${message}`;
+        label.string = message;
         label.fontSize = 18;
         label.color = Color.WHITE;
         label.overflow = Label.Overflow.SHRINK;

@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Label, Sprite, Button, Color,
-         tween, Vec3, UIOpacity, SpriteFrame, Texture2D, ImageAsset } from 'cc';
+         tween, Vec3, UIOpacity, SpriteFrame, Texture2D, ImageAsset, UITransform, Size } from 'cc';
 import { GameManager } from '../../core/GameManager';
 import { BattleSystem, BattleActionType } from '../../game/BattleSystem';
 import { GameItem, ToastType } from '../../data/GameTypes';
@@ -82,8 +82,152 @@ export class FishDetailPanel extends Component {
     // ==================== 生命周期 ====================
 
     start() {
+        this.ensureFallbackUI();
         this.bindEvents();
         this.hide(false);
+    }
+
+    /**
+     * 如果场景里没绑引用，则动态创建一个最小可用弹窗
+     */
+    private ensureFallbackUI(): void {
+        if (this.panelRoot && this.maskNode && this.actionButton && this.closeButton) {
+            return;
+        }
+
+        this.node.active = true;
+
+        if (!this.maskNode) {
+            this.maskNode = new Node('Mask');
+            this.node.addChild(this.maskNode);
+            const maskTransform = this.maskNode.addComponent(UITransform);
+            maskTransform.setContentSize(new Size(750, 1334));
+            const maskSprite = this.maskNode.addComponent(Sprite);
+            maskSprite.color = new Color(0, 0, 0, 160);
+            this.maskNode.addComponent(UIOpacity).opacity = 0;
+            this.maskNode.setPosition(0, 0, 0);
+        }
+
+        if (!this.panelRoot) {
+            this.panelRoot = new Node('PanelRoot');
+            this.node.addChild(this.panelRoot);
+            const panelTransform = this.panelRoot.addComponent(UITransform);
+            panelTransform.setContentSize(new Size(560, 760));
+            const panelBg = this.panelRoot.addComponent(Sprite);
+            panelBg.color = new Color(33, 40, 63, 245);
+            this.panelRoot.addComponent(UIOpacity).opacity = 0;
+            this.panelRoot.setPosition(0, 0, 1);
+        }
+
+        if (!this.fishImage) {
+            const fishImageNode = new Node('FishImage');
+            this.panelRoot.addChild(fishImageNode);
+            fishImageNode.setPosition(0, 80, 0);
+            const imageTransform = fishImageNode.addComponent(UITransform);
+            imageTransform.setContentSize(new Size(260, 260));
+            const imageSprite = fishImageNode.addComponent(Sprite);
+            imageSprite.color = new Color(87, 105, 145, 255);
+            this.fishImage = imageSprite;
+        }
+
+        if (!this.fishNameLabel) {
+            this.fishNameLabel = this.createLabel(this.panelRoot, 'FishNameLabel', '未命名的鱼', 36, 0, 280);
+        }
+        if (!this.authorLabel) {
+            this.authorLabel = this.createLabel(this.panelRoot, 'AuthorLabel', '作者: 未知', 24, 0, 235);
+            this.authorLabel.color = new Color(207, 227, 255, 255);
+        }
+        if (!this.descriptionLabel) {
+            this.descriptionLabel = this.createLabel(this.panelRoot, 'DescriptionLabel', '这条鱼没有描述', 24, 0, 180);
+            this.descriptionLabel.overflow = Label.Overflow.SHRINK;
+            const descTransform = this.descriptionLabel.node.getComponent(UITransform);
+            descTransform?.setContentSize(new Size(500, 100));
+        }
+        if (!this.voteCountLabel) {
+            this.voteCountLabel = this.createLabel(this.panelRoot, 'VoteCountLabel', '0 / 4', 30, 0, 95);
+            this.voteCountLabel.color = new Color(140, 255, 174, 255);
+        }
+        if (!this.votersLabel) {
+            this.votersLabel = this.createLabel(this.panelRoot, 'VotersLabel', '暂无投票', 20, 0, 55);
+            this.votersLabel.color = new Color(200, 200, 200, 255);
+        }
+        if (!this.voteProgressBar || !this.voteProgressFill) {
+            const progressRoot = new Node('VoteProgressBar');
+            this.panelRoot.addChild(progressRoot);
+            progressRoot.setPosition(0, 128, 0);
+            const progressTransform = progressRoot.addComponent(UITransform);
+            progressTransform.setContentSize(new Size(420, 18));
+            const progressBg = progressRoot.addComponent(Sprite);
+            progressBg.color = new Color(64, 72, 95, 255);
+
+            const fillNode = new Node('Fill');
+            progressRoot.addChild(fillNode);
+            fillNode.setPosition(0, 0, 0);
+            const fillTransform = fillNode.addComponent(UITransform);
+            fillTransform.setContentSize(new Size(420, 18));
+            const fillSprite = fillNode.addComponent(Sprite);
+            fillSprite.color = new Color(76, 175, 80, 255);
+            fillSprite.type = Sprite.Type.FILLED;
+            fillSprite.fillType = Sprite.FillType.HORIZONTAL;
+            fillSprite.fillStart = 0;
+            fillSprite.fillRange = 0;
+
+            this.voteProgressBar = progressRoot;
+            this.voteProgressFill = fillSprite;
+        }
+
+        if (!this.actionButton) {
+            this.actionButton = this.createButton(this.panelRoot, 'ActionButton', '就是它！', 0, -250, new Color(227, 68, 68, 255));
+        }
+        if (!this.actionButtonLabel) {
+            const actionLabel = this.actionButton.node.getChildByName('Label')?.getComponent(Label);
+            if (actionLabel) {
+                this.actionButtonLabel = actionLabel;
+            }
+        }
+        if (!this.closeButton) {
+            this.closeButton = this.createButton(this.panelRoot, 'CloseButton', '关闭', 0, -330, new Color(120, 120, 120, 255));
+        }
+    }
+
+    private createLabel(parent: Node, name: string, text: string, fontSize: number, x: number, y: number): Label {
+        const node = new Node(name);
+        parent.addChild(node);
+        node.setPosition(x, y, 0);
+        const transform = node.addComponent(UITransform);
+        transform.setContentSize(new Size(520, 46));
+        const label = node.addComponent(Label);
+        label.string = text;
+        label.fontSize = fontSize;
+        label.lineHeight = Math.max(36, fontSize + 8);
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.color = Color.WHITE;
+        return label;
+    }
+
+    private createButton(parent: Node, name: string, text: string, x: number, y: number, color: Color): Button {
+        const node = new Node(name);
+        parent.addChild(node);
+        node.setPosition(x, y, 0);
+        const transform = node.addComponent(UITransform);
+        transform.setContentSize(new Size(330, 72));
+        const sprite = node.addComponent(Sprite);
+        sprite.color = color;
+
+        const labelNode = new Node('Label');
+        node.addChild(labelNode);
+        const labelTransform = labelNode.addComponent(UITransform);
+        labelTransform.setContentSize(new Size(300, 60));
+        const label = labelNode.addComponent(Label);
+        label.string = text;
+        label.fontSize = 30;
+        label.lineHeight = 40;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.color = Color.WHITE;
+
+        return node.addComponent(Button);
     }
 
     /**
@@ -175,6 +319,8 @@ export class FishDetailPanel extends Component {
         if (result) {
             // 更新按钮状态
             this.updateActionButton();
+            // 执行操作后关闭弹窗，保持战斗节奏
+            this.hide();
         }
     }
 
@@ -322,6 +468,15 @@ export class FishDetailPanel extends Component {
     private loadFishImage(imageUrl: string): void {
         if (!this.fishImage || !imageUrl) return;
 
+        if (imageUrl.startsWith('local-sprite://')) {
+            const fishId = imageUrl.replace('local-sprite://', '');
+            const spriteFrame = GameManager.instance.getLocalFishSpriteFrame(fishId);
+            if (spriteFrame) {
+                this.fishImage.spriteFrame = spriteFrame;
+            }
+            return;
+        }
+
         if (imageUrl.startsWith('data:image')) {
             // Base64 图片
             const img = new Image();
@@ -409,13 +564,13 @@ export class FishDetailPanel extends Component {
         // 判断操作类型
         if (bullet.currentTarget === fishId) {
             // 追击
-            this.setButtonState('追击', this.COLOR_CHASE, true);
+            this.setButtonState('追击！', this.COLOR_CHASE, true);
         } else if (bullet.currentTarget) {
             // 换目标
-            this.setButtonState('换目标', this.COLOR_SWITCH, true);
+            this.setButtonState('换个目标', this.COLOR_SWITCH, true);
         } else {
             // 投票
-            this.setButtonState('投票', this.COLOR_VOTE, true);
+            this.setButtonState('就是它！', this.COLOR_VOTE, true);
         }
     }
 

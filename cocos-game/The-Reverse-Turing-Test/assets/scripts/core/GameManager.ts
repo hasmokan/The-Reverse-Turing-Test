@@ -1,4 +1,4 @@
-import { _decorator, Component, EventTarget, game } from 'cc';
+import { _decorator, Component, EventTarget, SpriteFrame, game } from 'cc';
 import {
     GamePhase, GameItem, ThemeConfig, BulletState,
     FishVoteInfo, GameResult, EliminationData,
@@ -83,6 +83,7 @@ export class GameManager extends Component {
     private _fishVotes: Map<string, FishVoteInfo> = new Map();
     private _playerId: string | null = null;
     private _playerFishId: string | null = null;
+    private _localFishSpriteFrames: Map<string, SpriteFrame> = new Map();
 
     // ==================== 游戏结果 ====================
 
@@ -234,6 +235,7 @@ export class GameManager extends Component {
 
             // 清除该鱼的票数
             this._fishVotes.delete(itemId);
+            this.clearLocalFishSpriteFrame(itemId);
 
             this.events.emit(GameManager.EVENT.ITEM_REMOVED, itemId);
         }
@@ -259,6 +261,22 @@ export class GameManager extends Component {
 
     setPlayerFishId(fishId: string): void {
         this._playerFishId = fishId;
+    }
+
+    setLocalFishSpriteFrame(fishId: string, spriteFrame: SpriteFrame): void {
+        this._localFishSpriteFrames.set(fishId, spriteFrame);
+    }
+
+    getLocalFishSpriteFrame(fishId: string): SpriteFrame | null {
+        return this._localFishSpriteFrames.get(fishId) || null;
+    }
+
+    private clearLocalFishSpriteFrame(itemId: string): void {
+        const spriteFrame = this._localFishSpriteFrames.get(itemId);
+        if (spriteFrame && spriteFrame.isValid) {
+            spriteFrame.destroy();
+        }
+        this._localFishSpriteFrames.delete(itemId);
     }
 
     // ==================== 战斗系统 - 子弹/投票 ====================
@@ -507,6 +525,12 @@ export class GameManager extends Component {
         this._toasts = [];
         this._floatingDamages = [];
         this._eliminationThreshold = BATTLE_CONSTANTS.ELIMINATION_THRESHOLD;
+        this._localFishSpriteFrames.forEach((spriteFrame) => {
+            if (spriteFrame && spriteFrame.isValid) {
+                spriteFrame.destroy();
+            }
+        });
+        this._localFishSpriteFrames.clear();
     }
 
     // ==================== 工具方法 ====================

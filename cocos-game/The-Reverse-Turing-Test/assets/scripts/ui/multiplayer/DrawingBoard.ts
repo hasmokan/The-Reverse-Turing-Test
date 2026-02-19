@@ -30,7 +30,6 @@ export class DrawingBoard extends Component {
 
     private isDrawing: boolean = false;
     private lastPoint: Vec2 = new Vec2();
-    private renderTexture: RenderTexture | null = null;
 
     onLoad() {
         // 初始化 Graphics
@@ -85,11 +84,6 @@ export class DrawingBoard extends Component {
             this.submitButton.node.off(Button.EventType.CLICK, this.onSubmit, this);
         }
 
-        // 释放渲染纹理
-        if (this.renderTexture) {
-            this.renderTexture.destroy();
-            this.renderTexture = null;
-        }
     }
 
     private onTouchStart(event: EventTouch) {
@@ -184,21 +178,19 @@ export class DrawingBoard extends Component {
             const width = Math.floor(transform.width);
             const height = Math.floor(transform.height);
 
-            // 创建 RenderTexture
-            if (!this.renderTexture) {
-                this.renderTexture = new RenderTexture();
-                this.renderTexture.reset({
-                    width: width,
-                    height: height,
-                });
-            }
+            // 每次都创建独立 RenderTexture，避免后续绘画覆盖已投放鱼
+            const renderTexture = new RenderTexture();
+            renderTexture.reset({
+                width: width,
+                height: height,
+            });
 
             // 如果已有旧的相机，先恢复
             const originalTarget = this.camera ? this.camera.targetTexture : null;
 
             // 临时设置相机渲染到纹理
             if (this.camera) {
-                this.camera.targetTexture = this.renderTexture;
+                this.camera.targetTexture = renderTexture;
 
                 // 手动触发一次渲染
                 this.camera.node.active = false;
@@ -210,7 +202,7 @@ export class DrawingBoard extends Component {
 
             // 创建 SpriteFrame
             const spriteFrame = new SpriteFrame();
-            spriteFrame.texture = this.renderTexture;
+            spriteFrame.texture = renderTexture;
 
             console.log('成功捕获画布内容为纹理');
             return spriteFrame;

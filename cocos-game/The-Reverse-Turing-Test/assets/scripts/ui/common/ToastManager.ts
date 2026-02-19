@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Label, Sprite, Color, tween, Vec3, UIOpacity } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Label, Sprite, Color, tween, Vec3, UIOpacity, UITransform, Size } from 'cc';
 import { GameManager } from '../../core/GameManager';
 import { ToastMessage, ToastType } from '../../data/GameTypes';
 import { UI_CONFIG } from '../../data/GameConstants';
@@ -31,7 +31,14 @@ export class ToastManager extends Component {
     private _activeToasts: Map<string, Node> = new Map();
 
     start() {
+        this.ensureFallbackContainer();
         this.bindEvents();
+    }
+
+    private ensureFallbackContainer(): void {
+        if (!this.container) {
+            this.container = this.node;
+        }
     }
 
     private bindEvents(): void {
@@ -60,10 +67,7 @@ export class ToastManager extends Component {
      * 显示 Toast
      */
     showToast(toast: ToastMessage): void {
-        if (!this.toastPrefab || !this.container) {
-            console.warn('[ToastManager] Prefab or container not set');
-            return;
-        }
+        if (!this.container) return;
 
         // 限制最大数量
         if (this._activeToasts.size >= UI_CONFIG.MAX_TOAST_COUNT) {
@@ -74,8 +78,8 @@ export class ToastManager extends Component {
             }
         }
 
-        // 创建 Toast 节点
-        const toastNode = instantiate(this.toastPrefab);
+        // 创建 Toast 节点（有 prefab 用 prefab，没有就动态创建）
+        const toastNode = this.toastPrefab ? instantiate(this.toastPrefab) : this.createSimpleToastNode();
         this.container.addChild(toastNode);
 
         // 设置内容
@@ -109,6 +113,33 @@ export class ToastManager extends Component {
         this.scheduleOnce(() => {
             this.removeToast(toast.id);
         }, (toast.duration || 2000) / 1000);
+    }
+
+    private createSimpleToastNode(): Node {
+        const node = new Node('Toast');
+        node.setScale(1, 1, 1);
+
+        const bg = new Node('Background');
+        node.addChild(bg);
+        bg.setPosition(0, 0, 0);
+        const bgTransform = bg.addComponent(UITransform);
+        bgTransform.setContentSize(new Size(560, 60));
+        bg.addComponent(Sprite);
+
+        const labelNode = new Node('Label');
+        node.addChild(labelNode);
+        labelNode.setPosition(0, 0, 0);
+        const labelTransform = labelNode.addComponent(UITransform);
+        labelTransform.setContentSize(new Size(520, 50));
+        const label = labelNode.addComponent(Label);
+        label.fontSize = 24;
+        label.lineHeight = 30;
+        label.color = Color.WHITE;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+
+        node.addComponent(UIOpacity);
+        return node;
     }
 
     /**

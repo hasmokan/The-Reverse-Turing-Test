@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, Sprite, Color, tween, Vec3, ProgressBar } from 'cc';
+import { _decorator, Component, Node, Label, Sprite, Color, tween, Vec3, ProgressBar, UITransform, Size } from 'cc';
 import { GameManager } from '../../core/GameManager';
 import { GamePhase } from '../../data/GameTypes';
 import { BATTLE_CONSTANTS } from '../../data/GameConstants';
@@ -62,9 +62,85 @@ export class GameInfoHUD extends Component {
 
     // ==================== 生命周期 ====================
 
+    onLoad() {
+        this.ensureFallbackUI();
+    }
+
     start() {
         this.bindEvents();
         this.updateAllDisplay();
+    }
+
+    /**
+     * 场景未绑定引用时，自动创建基础 HUD
+     */
+    private ensureFallbackUI(): void {
+        if (!this.aiCountLabel) {
+            this.aiCountLabel = this.createLabel('AICountLabel', 'AI: 0', -120, 50, 26);
+        }
+        if (!this.humanCountLabel) {
+            this.humanCountLabel = this.createLabel('HumanCountLabel', '人类: 0', -120, 12, 26);
+        }
+        if (!this.phaseLabel) {
+            this.phaseLabel = this.createLabel('PhaseLabel', '阶段: 等待中', -120, -26, 24);
+        }
+        if (!this.turbidityLabel) {
+            this.turbidityLabel = this.createLabel('TurbidityLabel', '浑浊度: 0%', 95, -26, 22);
+        }
+        if (!this.warningIcon) {
+            this.warningIcon = new Node('WarningIcon');
+            this.node.addChild(this.warningIcon);
+            const iconTransform = this.warningIcon.addComponent(UITransform);
+            iconTransform.setContentSize(new Size(220, 36));
+            this.warningIcon.setPosition(100, 50, 0);
+            const label = this.warningIcon.addComponent(Label);
+            label.string = '⚠ AI 数量危险';
+            label.fontSize = 22;
+            label.color = this.COLOR_DANGER;
+            label.horizontalAlign = Label.HorizontalAlign.CENTER;
+            label.verticalAlign = Label.VerticalAlign.CENTER;
+            this.warningIcon.active = false;
+        }
+
+        if (!this.turbidityBar) {
+            const barRoot = new Node('TurbidityBar');
+            this.node.addChild(barRoot);
+            barRoot.setPosition(95, 8, 0);
+
+            const bgTransform = barRoot.addComponent(UITransform);
+            bgTransform.setContentSize(new Size(190, 18));
+            const bgSprite = barRoot.addComponent(Sprite);
+            bgSprite.color = new Color(70, 70, 70, 180);
+
+            const fillNode = new Node('Bar');
+            barRoot.addChild(fillNode);
+            const fillTransform = fillNode.addComponent(UITransform);
+            fillTransform.setContentSize(new Size(190, 18));
+            const fillSprite = fillNode.addComponent(Sprite);
+            fillSprite.color = this.COLOR_SAFE;
+
+            this.turbidityBar = barRoot.addComponent(ProgressBar);
+            this.turbidityBar.mode = ProgressBar.Mode.HORIZONTAL;
+            this.turbidityBar.barSprite = fillSprite;
+            this.turbidityBar.totalLength = 190;
+            this.turbidityBar.progress = 0;
+        }
+    }
+
+    private createLabel(name: string, text: string, x: number, y: number, fontSize: number): Label {
+        const node = new Node(name);
+        this.node.addChild(node);
+        node.setPosition(x, y, 0);
+        const transform = node.addComponent(UITransform);
+        transform.setContentSize(new Size(220, 34));
+        const label = node.addComponent(Label);
+        label.string = text;
+        label.fontSize = fontSize;
+        label.lineHeight = fontSize + 6;
+        label.horizontalAlign = Label.HorizontalAlign.LEFT;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.color = Color.WHITE;
+        return label;
     }
 
     /**
@@ -128,7 +204,7 @@ export class GameInfoHUD extends Component {
 
         // AI 数量
         if (this.aiCountLabel) {
-            this.aiCountLabel.string = `${aiCount}`;
+            this.aiCountLabel.string = `AI: ${aiCount}`;
 
             // 根据 AI 数量设置颜色
             if (aiCount >= BATTLE_CONSTANTS.DEFEAT_MAX_AI_COUNT) {
@@ -142,7 +218,7 @@ export class GameInfoHUD extends Component {
 
         // 玩家数量
         if (this.humanCountLabel) {
-            this.humanCountLabel.string = `${humanCount}`;
+            this.humanCountLabel.string = `人类: ${humanCount}`;
 
             // 根据玩家数量设置颜色
             if (humanCount <= BATTLE_CONSTANTS.VICTORY_MIN_HUMAN_COUNT) {
@@ -172,7 +248,7 @@ export class GameInfoHUD extends Component {
         if (!gm || !this.phaseLabel) return;
 
         const phase = gm.phase;
-        this.phaseLabel.string = this.PHASE_NAMES[phase] || '未知';
+        this.phaseLabel.string = `阶段: ${this.PHASE_NAMES[phase] || '未知'}`;
 
         // 根据阶段设置颜色
         switch (phase) {

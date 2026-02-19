@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, Label, Color, tween, Vec3 } from 'cc';
+import { _decorator, Component, Node, Sprite, Label, Color, tween, Vec3, UITransform, Size } from 'cc';
 import { GameManager } from '../../core/GameManager';
 import { BattleSystem } from '../../game/BattleSystem';
 import { BATTLE_CONSTANTS } from '../../data/GameConstants';
@@ -29,10 +29,52 @@ export class CooldownHUD extends Component {
     private readonly COLOR_LOCKED = new Color(158, 158, 158, 255);  // 灰色 - 锁定
 
     private _isReady: boolean = true;
+    private _statusLabel: Label | null = null;
+
+    onLoad() {
+        this.ensureFallbackUI();
+    }
 
     start() {
         this.bindEvents();
         this.updateDisplay();
+    }
+
+    /**
+     * 场景引用缺失时自动创建基础 CD UI
+     */
+    private ensureFallbackUI(): void {
+        if (this.cooldownLabel || this.progressSprite) {
+            return;
+        }
+
+        const statusNode = new Node('StatusLabel');
+        this.node.addChild(statusNode);
+        statusNode.setPosition(0, 0, 0);
+        const statusTransform = statusNode.addComponent(UITransform);
+        statusTransform.setContentSize(new Size(280, 44));
+        const statusLabel = statusNode.addComponent(Label);
+        statusLabel.string = '子弹已装填';
+        statusLabel.fontSize = 28;
+        statusLabel.lineHeight = 36;
+        statusLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        statusLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        statusLabel.color = this.COLOR_READY;
+        this._statusLabel = statusLabel;
+
+        const cdNode = new Node('CooldownLabel');
+        this.node.addChild(cdNode);
+        cdNode.setPosition(0, -36, 0);
+        const cdTransform = cdNode.addComponent(UITransform);
+        cdTransform.setContentSize(new Size(220, 34));
+        this.cooldownLabel = cdNode.addComponent(Label);
+        this.cooldownLabel.string = '';
+        this.cooldownLabel.fontSize = 22;
+        this.cooldownLabel.lineHeight = 28;
+        this.cooldownLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.cooldownLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        this.cooldownLabel.color = Color.WHITE;
+        this.cooldownLabel.node.active = false;
     }
 
     private bindEvents(): void {
@@ -85,6 +127,10 @@ export class CooldownHUD extends Component {
         if (this.cooldownLabel) {
             this.cooldownLabel.node.active = false;
         }
+        if (this._statusLabel) {
+            this._statusLabel.string = '子弹已装填';
+            this._statusLabel.color = this.COLOR_READY;
+        }
 
         // 播放准备好特效
         this.playReadyEffect();
@@ -107,6 +153,10 @@ export class CooldownHUD extends Component {
         // 显示倒计时
         if (this.cooldownLabel) {
             this.cooldownLabel.node.active = true;
+        }
+        if (this._statusLabel) {
+            this._statusLabel.string = '冷却中...';
+            this._statusLabel.color = this.COLOR_COOLING;
         }
     }
 
@@ -144,6 +194,9 @@ export class CooldownHUD extends Component {
         if (this.cooldownLabel) {
             const seconds = (remaining / 1000).toFixed(1);
             this.cooldownLabel.string = `${seconds}s`;
+        }
+        if (this._statusLabel) {
+            this._statusLabel.string = `冷却中 ${Math.ceil(remaining / 1000)}s`;
         }
     }
 

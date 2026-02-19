@@ -254,7 +254,7 @@ export class SocketClient extends Component {
             const gm = GameManager.instance;
             if (data.fishId === gm.playerFishId) {
                 gm.setBeingAttacked();
-                gm.showToast(ToastType.WARNING, '你的鱼正在被攻击！');
+                gm.showToast(ToastType.WARNING, '⚠️ 有人正在怀疑你');
             }
         });
 

@@ -81,6 +81,15 @@ export class FishController extends Component {
     private loadFishImage(imageUrl: string): void {
         if (!imageUrl) return;
 
+        if (imageUrl.startsWith('local-sprite://')) {
+            const fishId = imageUrl.replace('local-sprite://', '');
+            const localSpriteFrame = GameManager.instance.getLocalFishSpriteFrame(fishId);
+            if (localSpriteFrame && this.fishSprite) {
+                this.fishSprite.spriteFrame = localSpriteFrame;
+            }
+            return;
+        }
+
         // 检查是否是 Base64 数据
         if (imageUrl.startsWith('data:image')) {
             this.loadBase64Image(imageUrl);
