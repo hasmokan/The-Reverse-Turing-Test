@@ -4,17 +4,16 @@
  * Cocos Creator 构建扩展 — 自动处理 RemoteUI 资源的构建优化
  *
  * 构建前（onBeforeBuild）：
+ *   - 动态扫描 assets/RemoteUI/*.png.meta 获取全部 RemoteUI UUID
  *   - 备份场景文件
- *   - 移除场景中对 RemoteUI 图片的直接引用，防止被打包到 main bundle
+ *   - 移除场景中对 RemoteUI 图片的直接引用（匹配任意属性名），防止被打包到 main bundle
  *
  * 构建后（onAfterBuild）：
  *   - 恢复场景文件
  *   - 清理 RemoteUI/native/ 目录（运行时通过 COS 远程加载，无需本地保留）
- *
- * 注意: 不清理 main/native/ 和 main/import/ 中的文件，
- *       因为 config.json 仍然引用它们，删除会导致运行时错误。
- *       正确的做法是通过 onBeforeBuild 移除场景引用，从根本上阻止
- *       RemoteUI 图片被打包进 main bundle。
+ *   - 在 main/native/ 中为 RemoteUI 资源创建 1×1 透明 PNG 占位符，
+ *     防止因 config.json 残留引用导致的 "file does not exist" 运行时错误
+ *     （占位图在运行时会被 ResourceLoader 从 COS 加载的正确纹理替换）
  *
  * 参考: https://docs.cocos.com/creator/3.8/manual/zh/editor/publish/custom-build-plugin
  */
@@ -31,22 +30,30 @@ const SCENE_FILES = [
     'assets/scenes/MultiPlayerScene.scene',
 ];
 
-// RemoteUI 资源的 UUID 列表（从 assets/RemoteUI/*.meta 中提取）
-const REMOTE_UUIDS = [
-    'd1405970-cbdb-46d5-b1e1-fff1578057de',
-    'd67307a6-08dc-40ee-9429-29ede466a79a',
-    'd5aa00f5-93a8-495f-9b8f-445af3bb52bd',
-    '83ed7d27-94a2-4456-9016-2784fa187603',
-    '82ecad44-924c-41ce-b5f2-3780d7a0189c',
-    'd7f72387-3e07-4794-b399-c3b134238f57',
-    '850caea2-9131-4a62-8104-cbd0078dcb9f',
-    '07ef7d44-22fc-4f0e-bf89-1791545bd885',
-    '3d3493d4-2ed2-4052-ae26-ff34f1ebfdfd',
-    '7dd00fed-216e-4a6b-affb-c24ecdb67a33',
-];
-
-// 引用匹配模式（_spriteFrame 引用 RemoteUI 的 SpriteFrame）
+// SpriteFrame sub-asset 后缀
 const SPRITE_FRAME_SUFFIX = '@f9941';
+
+// 1×1 透明 RGBA PNG 占位符（69 字节，Color Type 6 = RGBA，Bit Depth 8）
+const PLACEHOLDER_PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRUEArkJggg==',
+    'base64'
+);
+
+// UUID 解码常量（匹配 Cocos Creator 引擎 decode-uuid.ts 的算法）
+const BASE64_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+const BASE64_VALUES = new Array(128).fill(64);
+for (let i = 0; i < 64; i++) {
+    BASE64_VALUES[BASE64_KEYS.charCodeAt(i)] = i;
+}
+const HEX_CHARS = '0123456789abcdef';
+// UUID 模板中非 '-' 的位置索引（8, 13, 18, 23 是连字符位置）
+const UUID_HEX_INDICES = [
+    0, 1, 2, 3, 4, 5, 6, 7,
+    9, 10, 11, 12,
+    14, 15, 16, 17,
+    19, 20, 21, 22,
+    24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+];
 
 exports.throwError = true;
 
@@ -127,9 +134,72 @@ function resolveBuildDest(options, result) {
 }
 
 /**
- * 备份场景文件并移除 RemoteUI 引用
+ * 动态扫描 assets/RemoteUI/*.png.meta，提取所有 RemoteUI 图片的 UUID
  */
-function backupAndPatchScene(scenePath) {
+function scanRemoteUIUuids(projectRoot) {
+    const remoteUIDir = path.join(projectRoot, 'assets', 'RemoteUI');
+    const uuids = [];
+
+    if (!fs.existsSync(remoteUIDir)) {
+        console.warn(PACKAGE_NAME, `RemoteUI 目录不存在: ${remoteUIDir}`);
+        return uuids;
+    }
+
+    const metaFiles = fs.readdirSync(remoteUIDir).filter(f => f.endsWith('.png.meta'));
+    for (const metaFile of metaFiles) {
+        try {
+            const metaPath = path.join(remoteUIDir, metaFile);
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            if (meta.uuid) {
+                uuids.push(meta.uuid);
+                console.log(PACKAGE_NAME, `  发现资源: ${metaFile.replace('.meta', '')} → ${meta.uuid}`);
+            }
+        } catch (e) {
+            console.warn(PACKAGE_NAME, `解析 meta 失败: ${metaFile}: ${e.message}`);
+        }
+    }
+
+    console.log(PACKAGE_NAME, `共扫描到 ${uuids.length} 个 RemoteUI UUID（${metaFiles.length} 个 meta 文件）`);
+    return uuids;
+}
+
+/**
+ * 解码 Cocos Creator 压缩 UUID（22 字符 base64 → 标准 UUID 格式）
+ * 算法来源: cocos/core/utils/decode-uuid.ts
+ *
+ * 压缩格式: 2 个保留 hex 字符 + 20 个 base64 字符 = 22 字符
+ * 解码结果: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx（32 hex + 4 连字符 = 36 字符）
+ */
+function decodeUuid(base64) {
+    const parts = base64.split('@');
+    const compressed = parts[0];
+    if (compressed.length !== 22) return base64;
+
+    const result = new Array(36);
+    result[8] = result[13] = result[18] = result[23] = '-';
+
+    // 前 2 个字符直接保留
+    result[UUID_HEX_INDICES[0]] = compressed[0];
+    result[UUID_HEX_INDICES[1]] = compressed[1];
+
+    // 剩余 20 个 base64 字符解码为 30 个 hex 字符
+    for (let i = 2, j = 2; i < 22; i += 2) {
+        const lhs = BASE64_VALUES[compressed.charCodeAt(i)];
+        const rhs = BASE64_VALUES[compressed.charCodeAt(i + 1)];
+        result[UUID_HEX_INDICES[j++]] = HEX_CHARS[lhs >> 2];
+        result[UUID_HEX_INDICES[j++]] = HEX_CHARS[(lhs & 3) << 2 | rhs >> 4];
+        result[UUID_HEX_INDICES[j++]] = HEX_CHARS[rhs & 0xF];
+    }
+
+    const decoded = result.join('');
+    return parts.length > 1 ? decoded + '@' + parts.slice(1).join('@') : decoded;
+}
+
+/**
+ * 备份场景文件并移除 RemoteUI 引用
+ * 使用通用正则匹配任意属性名（覆盖 _spriteFrame、backgroundImage 等）
+ */
+function backupAndPatchScene(scenePath, remoteUuids) {
     if (!fs.existsSync(scenePath)) {
         console.log(PACKAGE_NAME, `场景不存在，跳过: ${path.basename(scenePath)}`);
         return 0;
@@ -149,28 +219,34 @@ function backupAndPatchScene(scenePath) {
 
     // 读取并移除 RemoteUI 引用
     let content = fs.readFileSync(scenePath, 'utf-8');
-    let patchCount = 0;
+    let totalReplacements = 0;
 
-    for (const uuid of REMOTE_UUIDS) {
-        // 匹配 _spriteFrame 引用 RemoteUI SpriteFrame 的 JSON 片段
-        const pattern = `"_spriteFrame":\\s*\\{\\s*"__uuid__":\\s*"${uuid}${SPRITE_FRAME_SUFFIX}",\\s*"__expectedType__":\\s*"cc\\.SpriteFrame"\\s*\\}`;
+    for (const uuid of remoteUuids) {
+        // 匹配任意属性名引用 RemoteUI SpriteFrame 的 JSON 片段
+        // 覆盖: "_spriteFrame", "backgroundImage", "_backgroundImage" 等
+        const pattern = `"([^"]+)":\\s*\\{\\s*"__uuid__":\\s*"${uuid}${SPRITE_FRAME_SUFFIX}",\\s*"__expectedType__":\\s*"cc\\.SpriteFrame"\\s*\\}`;
         const regex = new RegExp(pattern, 'g');
 
-        if (regex.test(content)) {
-            // 重建 regex（test 会移动 lastIndex）
-            content = content.replace(new RegExp(pattern, 'g'), '"_spriteFrame": null');
-            patchCount++;
+        let matchCount = 0;
+        content = content.replace(regex, (match, propName) => {
+            matchCount++;
+            return `"${propName}": null`;
+        });
+
+        if (matchCount > 0) {
+            totalReplacements += matchCount;
+            console.log(PACKAGE_NAME, `  ${uuid.substring(0, 8)}...: ${matchCount} 处引用已移除`);
         }
     }
 
-    if (patchCount > 0) {
+    if (totalReplacements > 0) {
         fs.writeFileSync(scenePath, content, 'utf-8');
-        console.log(PACKAGE_NAME, `${path.basename(scenePath)}: 移除 ${patchCount} 个 RemoteUI 引用`);
+        console.log(PACKAGE_NAME, `${path.basename(scenePath)}: 共移除 ${totalReplacements} 处 RemoteUI 引用`);
     } else {
         console.log(PACKAGE_NAME, `${path.basename(scenePath)}: 无需移除引用`);
     }
 
-    return patchCount;
+    return totalReplacements;
 }
 
 /**
@@ -189,6 +265,153 @@ function restoreScene(scenePath) {
     return false;
 }
 
+/**
+ * 在 main/native/ 中为 RemoteUI 资源创建 1×1 透明 PNG 占位符
+ *
+ * 策略:
+ *   Pass 1 — 扫描 main/native/ 已有文件，匹配 RemoteUI UUID 的大图替换为占位符
+ *   Pass 2 — 对 Pass 1 未匹配到的 UUID，读取 config.json 获取预期路径并创建占位符
+ *
+ * Native 文件路径格式（来源: cocos/asset/asset-manager/url-transformer.ts#combine）:
+ *   {nativeBase}/{uuid[0:2]}/{uuid}{.nativeVer}{ext}
+ *   其中 uuid 为完整解码后的 UUID（含连字符）
+ */
+function createPlaceholders(dest, remoteUuids) {
+    const mainNativeDir = path.join(dest, 'assets', 'main', 'native');
+
+    if (!fs.existsSync(mainNativeDir)) {
+        console.log(PACKAGE_NAME, 'main/native/ 目录不存在，跳过占位符创建');
+        return 0;
+    }
+
+    const foundUuids = new Set();
+    let count = 0;
+    let savedBytes = 0;
+
+    // Pass 1: 扫描已有文件，替换 RemoteUI 大图为占位符
+    for (const uuid of remoteUuids) {
+        const prefix = uuid.substring(0, 2);
+        const prefixDir = path.join(mainNativeDir, prefix);
+        if (!fs.existsSync(prefixDir)) continue;
+
+        // 查找以该 UUID 开头的文件（可能带 .hash 后缀）
+        const matchingFiles = fs.readdirSync(prefixDir).filter(f => f.startsWith(uuid));
+        if (matchingFiles.length > 0) {
+            foundUuids.add(uuid);
+            for (const file of matchingFiles) {
+                const filePath = path.join(prefixDir, file);
+                const oldSize = fs.statSync(filePath).size;
+                if (oldSize > PLACEHOLDER_PNG.length) {
+                    savedBytes += oldSize - PLACEHOLDER_PNG.length;
+                    fs.writeFileSync(filePath, PLACEHOLDER_PNG);
+                    console.log(PACKAGE_NAME, `  替换: ${prefix}/${file} (${oldSize} → ${PLACEHOLDER_PNG.length} bytes)`);
+                    count++;
+                }
+            }
+        }
+    }
+
+    // Pass 2: 对未找到文件的 UUID，从 config.json 获取预期路径并创建占位符
+    const missingUuids = remoteUuids.filter(u => !foundUuids.has(u));
+    if (missingUuids.length > 0) {
+        const created = createMissingPlaceholders(dest, mainNativeDir, missingUuids);
+        count += created;
+    }
+
+    if (savedBytes > 0) {
+        console.log(PACKAGE_NAME, `  占位符替换共节省: ${(savedBytes / 1024).toFixed(1)} KB`);
+    }
+
+    return count;
+}
+
+/**
+ * 通过解析 config.json 为缺失的 native 文件创建占位符
+ */
+function createMissingPlaceholders(dest, mainNativeDir, missingUuids) {
+    const configPath = path.join(dest, 'assets', 'main', 'config.json');
+
+    if (!fs.existsSync(configPath)) {
+        console.log(PACKAGE_NAME, 'config.json 不存在，使用简单模式创建占位符');
+        return createPlaceholdersSimple(mainNativeDir, missingUuids);
+    }
+
+    let config;
+    try {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (e) {
+        console.warn(PACKAGE_NAME, `解析 config.json 失败: ${e.message}`);
+        return createPlaceholdersSimple(mainNativeDir, missingUuids);
+    }
+
+    const configUuids = config.uuids || [];
+
+    // 解码 config 中的压缩 UUID，建立 fullUuid → index 映射
+    const uuidToIndex = {};
+    for (let i = 0; i < configUuids.length; i++) {
+        const decoded = decodeUuid(configUuids[i]);
+        uuidToIndex[decoded] = i;
+    }
+
+    // 解析 versions.native: [uuid_index, hash, uuid_index, hash, ...]
+    const nativeVers = {};
+    const nativeEntries = (config.versions && config.versions.native) || [];
+    for (let i = 0; i < nativeEntries.length; i += 2) {
+        nativeVers[nativeEntries[i]] = nativeEntries[i + 1];
+    }
+
+    // 解析 extensionMap: { ".png": [uuid_index, ...], ".jpg": [...] }
+    const extMap = {};
+    const extensionMap = config.extensionMap || {};
+    for (const ext of Object.keys(extensionMap)) {
+        const indices = extensionMap[ext];
+        if (Array.isArray(indices)) {
+            for (const idx of indices) {
+                if (typeof idx === 'number') extMap[idx] = ext;
+            }
+        }
+    }
+
+    let count = 0;
+    for (const uuid of missingUuids) {
+        const idx = uuidToIndex[uuid];
+        if (idx === undefined) {
+            // UUID 不在 config 中 → 场景补丁生效，构建未包含此资源，无需占位符
+            console.log(PACKAGE_NAME, `  补丁生效，无需占位: ${uuid.substring(0, 8)}...`);
+            continue;
+        }
+
+        const ver = nativeVers[idx] !== undefined ? '.' + nativeVers[idx] : '';
+        const ext = extMap[idx] || '.png';
+        const prefix = uuid.substring(0, 2);
+        const fileName = uuid + ver + ext;
+        const prefixDir = path.join(mainNativeDir, prefix);
+
+        fs.mkdirSync(prefixDir, { recursive: true });
+        fs.writeFileSync(path.join(prefixDir, fileName), PLACEHOLDER_PNG);
+        console.log(PACKAGE_NAME, `  创建: ${prefix}/${fileName} (${PLACEHOLDER_PNG.length} bytes)`);
+        count++;
+    }
+
+    return count;
+}
+
+/**
+ * 简单模式：无 config.json 时，直接以 {uuid}.png 创建占位符
+ */
+function createPlaceholdersSimple(mainNativeDir, uuids) {
+    let count = 0;
+    for (const uuid of uuids) {
+        const prefix = uuid.substring(0, 2);
+        const prefixDir = path.join(mainNativeDir, prefix);
+        fs.mkdirSync(prefixDir, { recursive: true });
+        fs.writeFileSync(path.join(prefixDir, uuid + '.png'), PLACEHOLDER_PNG);
+        console.log(PACKAGE_NAME, `  创建 (无 hash): ${prefix}/${uuid}.png (${PLACEHOLDER_PNG.length} bytes)`);
+        count++;
+    }
+    return count;
+}
+
 // ============================
 // 构建钩子
 // ============================
@@ -197,14 +420,21 @@ exports.onBeforeBuild = async function (options) {
     const projectRoot = getProjectRoot(options);
     console.log(PACKAGE_NAME, `[PRE-BUILD] 项目路径: ${projectRoot}`);
 
+    // 动态扫描 RemoteUI UUID
+    const remoteUuids = scanRemoteUIUuids(projectRoot);
+    if (remoteUuids.length === 0) {
+        console.log(PACKAGE_NAME, '[PRE-BUILD] 未找到 RemoteUI UUID，跳过');
+        return;
+    }
+
     let totalPatched = 0;
 
     for (const sceneRelPath of SCENE_FILES) {
         const scenePath = path.join(projectRoot, sceneRelPath);
-        totalPatched += backupAndPatchScene(scenePath);
+        totalPatched += backupAndPatchScene(scenePath, remoteUuids);
     }
 
-    console.log(PACKAGE_NAME, `[PRE-BUILD] 完成: 共移除 ${totalPatched} 个 RemoteUI 引用`);
+    console.log(PACKAGE_NAME, `[PRE-BUILD] 完成: 共移除 ${totalPatched} 处 RemoteUI 引用`);
 };
 
 exports.onAfterBuild = async function (options, result) {
@@ -227,9 +457,12 @@ exports.onAfterBuild = async function (options, result) {
         return;
     }
 
+    // 2. 动态扫描 RemoteUI UUID（用于占位符创建）
+    const remoteUuids = scanRemoteUIUuids(projectRoot);
+
     let totalRemoved = 0;
 
-    // 2. 清理远程 Bundle 的 native 目录
+    // 3. 清理远程 Bundle 的 native 目录
     for (const bundleName of REMOTE_BUNDLES) {
         const nativeDir = path.join(dest, 'assets', bundleName, 'native');
 
@@ -248,9 +481,12 @@ exports.onAfterBuild = async function (options, result) {
         console.log(PACKAGE_NAME, `已清理 ${bundleName}/native: ${files.length} 个文件, 释放 ${sizeMB} MB`);
     }
 
-    // 注意: 不清理 main/native/ 和 main/import/ 中的文件
-    // config.json 仍引用这些文件，删除会导致运行时错误
-    // 依赖 onBeforeBuild 移除场景引用，从根本上阻止 RemoteUI 图片进入 main bundle
+    // 4. 在 main/native/ 中为 RemoteUI 资源创建占位符 PNG
+    if (remoteUuids.length > 0) {
+        console.log(PACKAGE_NAME, '正在创建 main/native/ 占位符 PNG...');
+        const placeholderCount = createPlaceholders(dest, remoteUuids);
+        console.log(PACKAGE_NAME, `占位符处理完成: ${placeholderCount} 个文件`);
+    }
 
     if (totalRemoved > 0) {
         console.log(PACKAGE_NAME, `[POST-BUILD] 完成: 释放 ${(totalRemoved / 1024 / 1024).toFixed(2)} MB`);
