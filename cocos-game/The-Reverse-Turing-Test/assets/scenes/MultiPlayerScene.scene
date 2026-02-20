@@ -790,7 +790,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 216,
+      "width": 215.96896256310202,
       "height": 50.4
     },
     "_anchorPoint": {
@@ -823,7 +823,7 @@
     "_string": "画一条鱼吧！",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 36,
+    "_actualFontSize": 37.29535232383808,
     "_fontSize": 36,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
@@ -1101,9 +1101,6 @@
     "drawingCanvas": {
       "__id__": 24
     },
-    "graphics": {
-      "__id__": 26
-    },
     "clearButton": null,
     "submitButton": {
       "__id__": 30
@@ -1286,7 +1283,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 90,
+      "width": 89.96294929736257,
       "height": 50.4
     },
     "_anchorPoint": {
@@ -1319,7 +1316,7 @@
     "_string": "提交这条鱼",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 18,
+    "_actualFontSize": 18.64767616191904,
     "_fontSize": 18,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
@@ -1370,8 +1367,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 1,
-      "height": 1
+      "width": 150,
+      "height": 50
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1406,7 +1403,7 @@
     },
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 1,
+    "_sizeMode": 0,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -1479,7 +1476,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 176.669921875,
+      "width": 176.587627029971,
       "height": 50.4
     },
     "_anchorPoint": {
@@ -1512,7 +1509,7 @@
     "_string": "给你的鱼起个名字...",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 20,
+    "_actualFontSize": 20.719640179910044,
     "_fontSize": 20,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
@@ -1611,7 +1608,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 156.669921875,
+      "width": 156.59694063266693,
       "height": 50.4
     },
     "_anchorPoint": {
@@ -1644,7 +1641,7 @@
     "_string": "描述一下你的鱼...",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 20,
+    "_actualFontSize": 20.719640179910044,
     "_fontSize": 20,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
@@ -2264,7 +2261,7 @@
     "_string": "Enter text here...",
     "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_actualFontSize": 20,
+    "_actualFontSize": 20.719640179910044,
     "_fontSize": 20,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
@@ -2546,7 +2543,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 128,
+      "width": 127.99447715748235,
       "height": 47.88
     },
     "_anchorPoint": {
@@ -2579,7 +2576,7 @@
     "_string": "画一条鱼",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 32,
+    "_actualFontSize": 33.151424287856074,
     "_fontSize": 32,
     "_fontFamily": "Arial",
     "_lineHeight": 38,

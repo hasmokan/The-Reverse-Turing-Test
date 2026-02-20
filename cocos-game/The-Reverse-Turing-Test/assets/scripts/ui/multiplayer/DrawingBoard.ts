@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Graphics, EventTouch, Input, input, UITransform, Vec2, Vec3, Camera, Color, Button, RenderTexture, SpriteFrame, Sprite } from 'cc';
+import { _decorator, Component, Node, Graphics, EventTouch, Input, UITransform, Vec2, Vec3, Camera, Color, Button, RenderTexture, SpriteFrame, Sprite, Label } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -9,9 +9,6 @@ const { ccclass, property } = _decorator;
 export class DrawingBoard extends Component {
     @property(Node)
     drawingCanvas: Node = null!;
-
-    @property(Graphics)
-    graphics: Graphics = null!;
 
     @property(Button)
     clearButton: Button = null!;
@@ -28,14 +25,12 @@ export class DrawingBoard extends Component {
     @property({ type: Color })
     brushColor: Color = new Color(0, 0, 0, 255);
 
+    private graphics: Graphics | null = null;
     private isDrawing: boolean = false;
     private lastPoint: Vec2 = new Vec2();
 
     onLoad() {
-        // 初始化 Graphics
-        if (!this.graphics && this.drawingCanvas) {
-            this.graphics = this.drawingCanvas.getComponent(Graphics) || this.drawingCanvas.addComponent(Graphics);
-        }
+        this.ensureGraphicsTarget();
 
         // 设置画笔
         if (this.graphics) {
@@ -67,6 +62,37 @@ export class DrawingBoard extends Component {
         if (this.submitButton) {
             this.submitButton.node.on(Button.EventType.CLICK, this.onSubmit, this);
         }
+    }
+
+    /**
+     * 解析画板节点，避免把 Graphics 直接挂到 Sprite/Label 节点上触发组件冲突
+     */
+    private ensureGraphicsTarget(): void {
+        if (!this.drawingCanvas) {
+            this.drawingCanvas = this.node.getChildByName('DrawCanvas') || this.node;
+        }
+
+        this.graphics = this.drawingCanvas.getComponent(Graphics);
+        if (this.graphics) return;
+
+        const hasConflictingRenderer = !!this.drawingCanvas.getComponent(Sprite) || !!this.drawingCanvas.getComponent(Label);
+        if (hasConflictingRenderer) {
+            let childCanvas = this.drawingCanvas.getChildByName('DrawCanvas');
+            if (!childCanvas) {
+                childCanvas = new Node('DrawCanvas');
+                this.drawingCanvas.addChild(childCanvas);
+                childCanvas.setPosition(0, 0, 0);
+
+                const parentTransform = this.drawingCanvas.getComponent(UITransform);
+                const childTransform = childCanvas.addComponent(UITransform);
+                if (parentTransform) {
+                    childTransform.setContentSize(parentTransform.contentSize);
+                }
+            }
+            this.drawingCanvas = childCanvas;
+        }
+
+        this.graphics = this.drawingCanvas.getComponent(Graphics) || this.drawingCanvas.addComponent(Graphics);
     }
 
     onDestroy() {

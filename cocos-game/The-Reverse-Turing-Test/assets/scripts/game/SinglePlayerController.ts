@@ -88,17 +88,17 @@ export class SinglePlayerController extends Component {
     @property(Node)
     descInputNode: Node = null!;
 
-    @property(Button)
-    submitButton: Button = null!;
+    @property(Node)
+    submitButton: Node | Button = null!;
 
-    @property(Button)
-    startGameButton: Button = null!;
+    @property(Node)
+    startGameButton: Node | Button = null!;
 
-    @property(Button)
-    drawMoreButton: Button = null!;
+    @property(Node)
+    drawMoreButton: Node | Button = null!;
 
-    @property(Button)
-    backButton: Button = null!;
+    @property(Node)
+    backButton: Node | Button = null!;
 
     @property(Node)
     killFeedNode: Node = null!;
@@ -200,19 +200,29 @@ export class SinglePlayerController extends Component {
         }
     }
 
+    private getButtonComponent(node: Node | null, fieldName: string): Button | null {
+        if (!node) return null;
+        const button = node.getComponent(Button);
+        if (!button) {
+            console.warn(`[SinglePlayerController] ${fieldName} 未绑定 Button 组件: ${node.name}`);
+        }
+        return button;
+    }
+
+    private resolveButtonNode(target: Node | Button | null, fieldName: string): Node | null {
+        if (!target) return null;
+        if (target instanceof Node) return target;
+        const componentNode = (target as Button).node;
+        if (componentNode) return componentNode;
+        console.warn(`[SinglePlayerController] ${fieldName} 不是有效的 Node/Button 引用`);
+        return null;
+    }
+
     private bindButtons(): void {
-        if (this.submitButton) {
-            this.submitButton.node.on(Button.EventType.CLICK, this.onSubmitFish, this);
-        }
-        if (this.startGameButton) {
-            this.startGameButton.node.on(Button.EventType.CLICK, this.onStartGame, this);
-        }
-        if (this.drawMoreButton) {
-            this.drawMoreButton.node.on(Button.EventType.CLICK, this.onDrawMore, this);
-        }
-        if (this.backButton) {
-            this.backButton.node.on(Button.EventType.CLICK, this.onBack, this);
-        }
+        this.resolveButtonNode(this.submitButton, 'submitButton')?.on(Button.EventType.CLICK, this.onSubmitFish, this);
+        this.resolveButtonNode(this.startGameButton, 'startGameButton')?.on(Button.EventType.CLICK, this.onStartGame, this);
+        this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton')?.on(Button.EventType.CLICK, this.onDrawMore, this);
+        this.resolveButtonNode(this.backButton, 'backButton')?.on(Button.EventType.CLICK, this.onBack, this);
     }
 
     private setupBasicUI(): void {
@@ -294,8 +304,10 @@ export class SinglePlayerController extends Component {
         if (this.drawingBoardNode) nodes.push(this.drawingBoardNode);
         if (this.nameInputNode) nodes.push(this.nameInputNode);
         if (this.descInputNode) nodes.push(this.descInputNode);
-        if (this.submitButton?.node) nodes.push(this.submitButton.node);
-        if (this.startGameButton?.node) nodes.push(this.startGameButton.node);
+        const submitButtonNode = this.resolveButtonNode(this.submitButton, 'submitButton');
+        const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton');
+        if (submitButtonNode) nodes.push(submitButtonNode);
+        if (startGameButtonNode) nodes.push(startGameButtonNode);
 
         if (this.drawingPhaseUI) {
             const quickFill = this.drawingPhaseUI.getChildByName('QuickFillButton');
@@ -484,8 +496,9 @@ export class SinglePlayerController extends Component {
 
         gm.showToast(ToastType.SUCCESS, '投放成功！');
 
-        if (this.startGameButton) {
-            this.startGameButton.node.active = true;
+        const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton');
+        if (startGameButtonNode) {
+            startGameButtonNode.active = true;
         }
 
         this.updateDrawMoreButtonState();
@@ -745,14 +758,18 @@ export class SinglePlayerController extends Component {
     }
 
     private updateDrawMoreButtonState(): void {
-        if (!this.drawMoreButton) return;
+        const drawMoreButtonNode = this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton');
+        if (!drawMoreButtonNode) return;
 
         const activeCount = this._ownedFishIds.size;
         const available = activeCount < MAX_ACTIVE_FISH;
+        const drawMoreButton = this.getButtonComponent(drawMoreButtonNode, 'drawMoreButton');
 
-        this.drawMoreButton.interactable = available;
+        if (drawMoreButton) {
+            drawMoreButton.interactable = available;
+        }
 
-        const label = this.drawMoreButton.node.getChildByName('Label')?.getComponent(Label);
+        const label = drawMoreButtonNode.getChildByName('Label')?.getComponent(Label);
         if (label) {
             label.string = available
                 ? `画一条鱼 (${activeCount}/${MAX_ACTIVE_FISH})`
@@ -760,7 +777,7 @@ export class SinglePlayerController extends Component {
             label.color = available ? Color.WHITE : new Color(230, 230, 230, 255);
         }
 
-        const bg = this.drawMoreButton.node.getComponent(Sprite);
+        const bg = drawMoreButtonNode.getComponent(Sprite);
         if (bg) {
             bg.color = available ? new Color(100, 180, 255, 255) : new Color(130, 130, 130, 255);
         }
@@ -789,23 +806,27 @@ export class SinglePlayerController extends Component {
                 .start();
         });
 
-        if (visible && this.startGameButton) {
-            this.startGameButton.node.active = this._ownedFishIds.size > 0;
+        const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton');
+        if (visible && startGameButtonNode) {
+            startGameButtonNode.active = this._ownedFishIds.size > 0;
         }
 
         this.updateDrawPanelToggleState();
     }
 
     private updateDrawPanelToggleState(): void {
-        if (!this.drawMoreButton) return;
+        const node = this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton');
+        if (!node) return;
 
         const activeCount = this._ownedFishIds.size;
         const available = activeCount < MAX_ACTIVE_FISH;
-        const canShow = (this._phase === SinglePlayerPhase.DRAWING || this._phase === SinglePlayerPhase.VOTING) && !this._isDrawPanelVisible;
-        const node = this.drawMoreButton.node;
+        const canShow = this._phase !== SinglePlayerPhase.GAMEOVER;
+        const drawMoreButton = this.getButtonComponent(node, 'drawMoreButton');
         node.active = canShow;
 
-        this.drawMoreButton.interactable = available;
+        if (drawMoreButton) {
+            drawMoreButton.interactable = available;
+        }
 
         const label = node.getChildByName('Label')?.getComponent(Label);
         if (label) {
@@ -819,6 +840,7 @@ export class SinglePlayerController extends Component {
             bg.color = available ? new Color(249, 137, 74, 255) : new Color(130, 130, 130, 255);
         }
     }
+
 
     private showLoadingOverlay(duration: number): void {
         if (!this._loadingOverlay) return;
@@ -994,18 +1016,10 @@ export class SinglePlayerController extends Component {
             this.drawingBoardNode.off('drawing-completed', this.onDrawingCompleted, this);
         }
 
-        if (this.submitButton) {
-            this.submitButton.node.off(Button.EventType.CLICK, this.onSubmitFish, this);
-        }
-        if (this.startGameButton) {
-            this.startGameButton.node.off(Button.EventType.CLICK, this.onStartGame, this);
-        }
-        if (this.drawMoreButton) {
-            this.drawMoreButton.node.off(Button.EventType.CLICK, this.onDrawMore, this);
-        }
-        if (this.backButton) {
-            this.backButton.node.off(Button.EventType.CLICK, this.onBack, this);
-        }
+        this.resolveButtonNode(this.submitButton, 'submitButton')?.off(Button.EventType.CLICK, this.onSubmitFish, this);
+        this.resolveButtonNode(this.startGameButton, 'startGameButton')?.off(Button.EventType.CLICK, this.onStartGame, this);
+        this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton')?.off(Button.EventType.CLICK, this.onDrawMore, this);
+        this.resolveButtonNode(this.backButton, 'backButton')?.off(Button.EventType.CLICK, this.onBack, this);
 
         if (this.drawingPhaseUI) {
             const quickFill = this.drawingPhaseUI.getChildByName('QuickFillButton');
