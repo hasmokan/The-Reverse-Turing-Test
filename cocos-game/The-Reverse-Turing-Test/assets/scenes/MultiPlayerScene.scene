@@ -378,7 +378,7 @@
       "__expectedType__": "cc.SpriteFrame"
     },
     "autoFitScreen": true,
-    "fitMode": 0,
+    "fitMode": 3,
     "designWidth": 750,
     "designHeight": 1334,
     "_id": "7bYM/2Dq1JIpj/l2pwo4/n"
@@ -2521,7 +2521,7 @@
     "remoteUrl": "https://turing-test-1319469298.cos.ap-guangzhou.myqcloud.com/drawborad.png?imageSlim",
     "backgroundImage": null,
     "autoFitScreen": true,
-    "fitMode": 0,
+    "fitMode": 3,
     "designWidth": 750,
     "designHeight": 1334,
     "_id": "eeGKRF+cNJWI3KydVLH8Zw"

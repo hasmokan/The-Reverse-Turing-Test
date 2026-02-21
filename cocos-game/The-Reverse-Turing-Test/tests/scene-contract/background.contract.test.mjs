@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
-test("MultiPlayer background adaptation component exposes fit controls", () => {
+test("MultiPlayer background fit mode is width-priority stretch-height", () => {
   const scene = readScene("assets/scenes/MultiPlayerScene.scene");
   const background = findNodeByName(scene, "9_16_hand-drawn_grid_canvas 2");
   assert.ok(background);
@@ -21,16 +21,25 @@ test("MultiPlayer background adaptation component exposes fit controls", () => {
   );
 
   assert.ok(bgComponent, "Background adaptation component should exist");
-  assert.equal(typeof bgComponent.fitMode, "number");
-  assert.equal(bgComponent.autoFitScreen, true);
+  assert.equal(bgComponent.fitMode, 3);
 });
 
-test("GameBootstrap contains remote-image apply path", () => {
+test("BackgroundManager defaults to width-priority mode", () => {
+  const source = fs.readFileSync(
+    path.resolve(PROJECT_ROOT, "assets/scripts/ui/common/BackgroundManager.ts"),
+    "utf8"
+  );
+
+  assert.match(source, /WIDTH_PRIORITY_STRETCH_HEIGHT/);
+  assert.match(source, /fitMode:\s*FitMode\s*=\s*FitMode\.WIDTH_PRIORITY_STRETCH_HEIGHT/);
+});
+
+test("GameBootstrap applies remote background via BackgroundManager when available", () => {
   const source = fs.readFileSync(
     path.resolve(PROJECT_ROOT, "assets/scripts/core/GameBootstrap.ts"),
     "utf8"
   );
 
-  assert.match(source, /applyRemoteImages\(\)/);
-  assert.match(source, /sprite\.spriteFrame\s*=\s*spriteFrame/);
+  assert.match(source, /getComponent\(BackgroundManager\)/);
+  assert.match(source, /changeBackground\(spriteFrame\)/);
 });

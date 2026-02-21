@@ -2,6 +2,7 @@ import { _decorator, Component, Node, Sprite, director, Color, find } from 'cc';
 import { ResourceLoader } from './ResourceLoader';
 import { LoadingScreen } from '../ui/common/LoadingScreen';
 import { ResourceConfig } from './ResourceConfig';
+import { BackgroundManager } from '../ui/common/BackgroundManager';
 
 const { ccclass, property } = _decorator;
 
@@ -131,7 +132,14 @@ export class GameBootstrap extends Component {
                 continue;
             }
 
-            sprite.spriteFrame = spriteFrame;
+            // 节点挂了 BackgroundManager 时，统一走 changeBackground 触发重适配。
+            const backgroundManager = targetNode.getComponent(BackgroundManager);
+            if (backgroundManager) {
+                backgroundManager.changeBackground(spriteFrame);
+            } else {
+                sprite.spriteFrame = spriteFrame;
+            }
+
             sprite.color = new Color(255, 255, 255, 255);
             applied++;
         }
