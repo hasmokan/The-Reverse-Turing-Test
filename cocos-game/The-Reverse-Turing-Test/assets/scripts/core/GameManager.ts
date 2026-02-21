@@ -1,10 +1,11 @@
-import { _decorator, Component, EventTarget, SpriteFrame, game } from 'cc';
+import { _decorator, Component, Director, EventTarget, Node, SpriteFrame, director, game } from 'cc';
 import {
     GamePhase, GameItem, ThemeConfig, BulletState,
     FishVoteInfo, GameResult, EliminationData,
     ToastType, ToastMessage, FloatingDamage, Position, Velocity
 } from '../data/GameTypes';
 import { BATTLE_CONSTANTS, PHYSICS_CONFIG } from '../data/GameConstants';
+import { PresetFishSwimSpawner } from '../game/PresetFishSwimSpawner';
 
 const { ccclass, property } = _decorator;
 
@@ -118,6 +119,10 @@ export class GameManager extends Component {
 
         // 启动 CD 检查定时器
         this.schedule(this.checkCooldown, 0.1);
+
+        // 无论从哪个入口进入，多人场景都要兜底挂载预制鱼背景游动器。
+        director.on(Director.EVENT_AFTER_SCENE_LAUNCH, this.onAfterSceneLaunch, this);
+        this.onAfterSceneLaunch();
     }
 
     onDestroy() {
@@ -125,6 +130,7 @@ export class GameManager extends Component {
             GameManager._instance = null!;
         }
         this.unschedule(this.checkCooldown);
+        director.off(Director.EVENT_AFTER_SCENE_LAUNCH, this.onAfterSceneLaunch, this);
     }
 
     // ==================== Getters ====================
@@ -545,5 +551,73 @@ export class GameManager extends Component {
 
     private randomRange(min: number, max: number): number {
         return Math.random() * (max - min) + min;
+    }
+
+    private onAfterSceneLaunch(): void {
+        const scene = director.getScene();
+        if (!scene || scene.name !== 'MultiPlayerScene') {
+            return;
+        }
+
+        const existing = this.findActivePresetSpawner(scene);
+        if (existing) {
+            return;
+        }
+
+        const host = this.findNodeByName(scene, 'Canvas') || scene;
+        let spawner = host.getComponent(PresetFishSwimSpawner);
+        if (!spawner) {
+            spawner = host.addComponent(PresetFishSwimSpawner);
+        }
+
+        const swimContainer = this.findVisibleNodeByNames(scene, [
+            'FishSwinContainer',
+            'FishSwimContainer',
+            'FishContainer'
+        ]);
+        if (swimContainer) {
+            spawner.fishSwimContainer = swimContainer;
+        }
+    }
+
+    private findActivePresetSpawner(root: Node): PresetFishSwimSpawner | null {
+        const spawner = root.getComponent(PresetFishSwimSpawner);
+        if (spawner && root.activeInHierarchy) {
+            return spawner;
+        }
+
+        for (const child of root.children) {
+            const found = this.findActivePresetSpawner(child);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private findVisibleNodeByNames(root: Node, names: string[]): Node | null {
+        for (const name of names) {
+            const found = this.findNodeByName(root, name);
+            if (found && found.activeInHierarchy) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private findNodeByName(root: Node, name: string): Node | null {
+        if (root.name === name) {
+            return root;
+        }
+
+        for (const child of root.children) {
+            const found = this.findNodeByName(child, name);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
     }
 }
