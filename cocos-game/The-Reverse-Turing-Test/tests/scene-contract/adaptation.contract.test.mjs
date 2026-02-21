@@ -1,11 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   readScene,
+  readJson,
   findNodeByName,
   getNodeComponents,
   findComponentByPredicate,
 } from "./sceneJson.mjs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
 function assertCanvasExists(scene, sceneName) {
   const canvas = findNodeByName(scene, "Canvas");
@@ -16,6 +24,31 @@ function assertCanvasExists(scene, sceneName) {
     `${sceneName} Canvas must include cc.Canvas component`
   );
 }
+
+test("project designResolution is width-first", () => {
+  const cfg = readJson("settings/v2/packages/project.json");
+  assert.equal(cfg.general.designResolution.fitWidth, true);
+  assert.equal(cfg.general.designResolution.fitHeight, false);
+});
+
+test("screen adaptation policy module is present", () => {
+  const source = fs.readFileSync(
+    path.resolve(PROJECT_ROOT, "assets/scripts/ui/common/ScreenAdaptationPolicy.ts"),
+    "utf8"
+  );
+  assert.match(source, /export function applyCanvasScaleMode/);
+  assert.match(source, /fitWidth/);
+  assert.match(source, /fitHeight/);
+});
+
+test("CameraAdapter uses shared screen adaptation policy", () => {
+  const source = fs.readFileSync(
+    path.resolve(PROJECT_ROOT, "assets/scripts/ui/common/CameraAdapter.ts"),
+    "utf8"
+  );
+  assert.match(source, /ScreenAdaptationPolicy/);
+  assert.match(source, /applyCanvasScaleMode\(/);
+});
 
 test("MainScene has baseline adaptation structure", () => {
   const scene = readScene("assets/scenes/MainScene.scene");

@@ -1,4 +1,5 @@
-import { _decorator, Component, Camera, view, screen } from 'cc';
+import { _decorator, Component, Camera, view, find, Canvas } from 'cc';
+import { applyCanvasScaleMode } from './ScreenAdaptationPolicy';
 const { ccclass, property } = _decorator;
 
 /**
@@ -17,6 +18,12 @@ export class CameraAdapter extends Component {
     @property({ tooltip: '是否自动适配' })
     autoAdapt: boolean = true;
 
+    @property({ tooltip: '标准宽高比（用于可选分支策略）' })
+    standardRatio: number = 9 / 16;
+
+    @property({ tooltip: '是否始终宽度优先（当前项目建议开启）' })
+    preferFitWidth: boolean = true;
+
     private _camera: Camera = null!;
 
     onLoad() {
@@ -29,6 +36,7 @@ export class CameraAdapter extends Component {
 
     start() {
         if (this.autoAdapt) {
+            this.applyCanvasPolicy();
             this.adaptCamera();
         }
     }
@@ -50,9 +58,7 @@ export class CameraAdapter extends Component {
         const visibleSize = view.getVisibleSize();
         const designSize = view.getDesignResolutionSize();
 
-        // 计算正交高度
-        // 对于 Fit Height 模式，orthoHeight = 设计高度 / 2
-        // 对于 Fit Width 模式，需要根据实际宽高比计算
+        // 正交相机高度跟随设计分辨率高度变化
         const orthoHeight = designSize.height / 2;
 
         this._camera.orthoHeight = orthoHeight;
@@ -67,8 +73,21 @@ export class CameraAdapter extends Component {
             摄像头位置: (0, 0, 1000)`);
     }
 
+    private applyCanvasPolicy() {
+        const canvasNode = find('Canvas');
+        const canvas = canvasNode?.getComponent(Canvas);
+        if (!canvas) {
+            console.warn('[CameraAdapter] Canvas not found, skip canvas policy');
+            return;
+        }
+
+        const result = applyCanvasScaleMode(canvas, this.standardRatio, this.preferFitWidth);
+        console.log(`[CameraAdapter] Canvas policy applied: fitWidth=${result.fitWidth}, fitHeight=${result.fitHeight}, ratio=${result.currentRatio.toFixed(3)}`);
+    }
+
     private onCanvasResize() {
         if (this.autoAdapt) {
+            this.applyCanvasPolicy();
             this.adaptCamera();
         }
     }
