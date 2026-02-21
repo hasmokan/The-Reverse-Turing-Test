@@ -56,13 +56,15 @@ export class WebAdapter implements IPlatformAdapter {
 
     constructor() {
         // 监听页面可见性变化
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                this.hideCallbacks.forEach(cb => cb());
-            } else {
-                this.showCallbacks.forEach(cb => cb());
-            }
-        });
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    this.hideCallbacks.forEach(cb => cb());
+                } else {
+                    this.showCallbacks.forEach(cb => cb());
+                }
+            });
+        }
     }
 
     getPlatformName(): string {
@@ -129,18 +131,20 @@ export class WebAdapter implements IPlatformAdapter {
     }
 
     shareAppMessage(options: { title: string; imageUrl?: string; query?: string }): void {
+        const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+
         // Web 端使用 Web Share API
-        if (navigator.share) {
+        if (typeof navigator !== 'undefined' && navigator.share) {
             navigator.share({
                 title: options.title,
                 text: PLATFORM.SHARE.DESC,
-                url: window.location.href + (options.query ? `?${options.query}` : '')
+                url: currentUrl + (options.query ? `?${options.query}` : '')
             }).catch(err => {
                 console.log('[WebAdapter] Share failed:', err);
             });
         } else {
             // 复制链接到剪贴板
-            const url = window.location.href + (options.query ? `?${options.query}` : '');
+            const url = currentUrl + (options.query ? `?${options.query}` : '');
             this.setClipboard(url);
             console.log('[WebAdapter] Share link copied to clipboard');
         }
@@ -148,14 +152,14 @@ export class WebAdapter implements IPlatformAdapter {
 
     vibrate(type?: 'light' | 'medium' | 'heavy'): void {
         // Web 端使用 Vibration API
-        if (navigator.vibrate) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
             const duration = type === 'heavy' ? 100 : type === 'light' ? 30 : 50;
             navigator.vibrate(duration);
         }
     }
 
     async setClipboard(data: string): Promise<void> {
-        if (navigator.clipboard) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
             await navigator.clipboard.writeText(data);
         }
     }
@@ -172,10 +176,11 @@ export class WebAdapter implements IPlatformAdapter {
 // ==================== 微信小游戏适配器 ====================
 
 export class WeChatAdapter implements IPlatformAdapter {
-    // @ts-ignore - wx 是微信小游戏全局对象
-    private wx: any = (window as any).wx;
+    private wx: any = null;
 
     constructor() {
+        const globalObj = globalThis as any;
+        this.wx = globalObj.wx || (typeof window !== 'undefined' ? (window as any).wx : null);
         if (!this.wx) {
             console.error('[WeChatAdapter] WeChat API not available');
         }
@@ -369,7 +374,8 @@ let _adapter: IPlatformAdapter | null = null;
 export function getPlatformAdapter(): IPlatformAdapter {
     if (_adapter) return _adapter;
 
-    if (sys.platform === sys.Platform.WECHAT_GAME) {
+    const hasWx = !!(globalThis as any).wx;
+    if (sys.platform === sys.Platform.WECHAT_GAME || hasWx) {
         _adapter = new WeChatAdapter();
         // 初始化微信环境
         (_adapter as WeChatAdapter).init();

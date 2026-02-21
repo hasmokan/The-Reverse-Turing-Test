@@ -1,5 +1,5 @@
 import { _decorator, Component, Node, Label, Sprite, Button, Color,
-         tween, Vec3, UIOpacity, SpriteFrame, Texture2D, ImageAsset, UITransform, Size } from 'cc';
+         tween, Vec3, UIOpacity, SpriteFrame, Texture2D, ImageAsset, UITransform, Size, assetManager } from 'cc';
 import { GameManager } from '../../core/GameManager';
 import { BattleSystem, BattleActionType } from '../../game/BattleSystem';
 import { GameItem, ToastType } from '../../data/GameTypes';
@@ -478,11 +478,15 @@ export class FishDetailPanel extends Component {
         }
 
         if (imageUrl.startsWith('data:image')) {
-            // Base64 图片
-            const img = new Image();
-            img.onload = () => {
+            // Base64 图片（跨平台走 assetManager，避免直接依赖浏览器 Image）
+            assetManager.loadRemote<ImageAsset>(imageUrl, (err, imageAsset) => {
+                if (err) {
+                    console.error('[FishDetailPanel] Load base64 image failed:', err);
+                    return;
+                }
+
                 const texture = new Texture2D();
-                texture.image = new ImageAsset(img);
+                texture.image = imageAsset;
 
                 const spriteFrame = new SpriteFrame();
                 spriteFrame.texture = texture;
@@ -490,8 +494,7 @@ export class FishDetailPanel extends Component {
                 if (this.fishImage) {
                     this.fishImage.spriteFrame = spriteFrame;
                 }
-            };
-            img.src = imageUrl;
+            });
         }
     }
 

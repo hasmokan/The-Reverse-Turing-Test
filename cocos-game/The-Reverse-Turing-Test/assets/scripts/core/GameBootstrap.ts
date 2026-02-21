@@ -24,6 +24,7 @@ export class GameBootstrap extends Component {
     backgroundSprite: Sprite = null!;
 
     private _isReady = false;
+    private _hasCompleted = false;
 
     async start() {
         console.log('[GameBootstrap] 游戏启动中...');
@@ -37,8 +38,20 @@ export class GameBootstrap extends Component {
             this.loadingScreen.show();
         }
 
-        // 预加载资源
-        await this.preloadResources();
+        // 启动兜底超时，防止资源层异常导致一直卡在加载页
+        this.scheduleOnce(() => {
+            if (!this._hasCompleted) {
+                console.warn('[GameBootstrap] 加载兜底触发，强制进入主菜单');
+                this.onLoadComplete();
+            }
+        }, 20);
+
+        try {
+            // 预加载资源
+            await this.preloadResources();
+        } catch (error) {
+            console.error('[GameBootstrap] 启动阶段异常:', error);
+        }
 
         // 加载完成
         this.onLoadComplete();
@@ -142,6 +155,10 @@ export class GameBootstrap extends Component {
      * 加载完成回调
      */
     private onLoadComplete(): void {
+        if (this._hasCompleted) {
+            return;
+        }
+        this._hasCompleted = true;
         this._isReady = true;
 
         console.log('[GameBootstrap] 所有资源加载完成');

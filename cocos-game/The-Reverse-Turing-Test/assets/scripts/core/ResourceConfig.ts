@@ -36,7 +36,6 @@ export class ResourceConfig {
         'icon_gear2': '灰色齿轮图标2',
         'icon_brain': '肉色大脑图标',
         'icon_bulb': '黄色灯泡图标',
-        'back_btn': 'BackButton',
     };
 
     /**

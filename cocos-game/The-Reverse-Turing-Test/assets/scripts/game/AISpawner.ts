@@ -32,6 +32,9 @@ const FISH_COLORS: string[] = [
     '#BB8FCE', '#85C1E9', '#F0B27A', '#82E0AA'
 ];
 
+// 1x1 白色像素，作为极端环境（无 canvas API）下的兜底图片
+const FALLBACK_AI_FISH_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6z2ioAAAAASUVORK5CYII=';
+
 /**
  * AI鱼生成器
  * 随机阈值机制，程序化生成彩色鱼形占位图
@@ -127,10 +130,19 @@ export class AISpawner extends Component {
      */
     private generateFishImageBase64(): string {
         const size = 120;
-        const canvas = document.createElement('canvas');
+        const canvas = this.createCanvas(size);
+        if (!canvas) {
+            console.warn('[AISpawner] 当前运行环境不支持 Canvas，使用兜底图片');
+            return FALLBACK_AI_FISH_IMAGE;
+        }
+
         canvas.width = size;
         canvas.height = size;
-        const ctx = canvas.getContext('2d')!;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            console.warn('[AISpawner] Canvas 2D 上下文不可用，使用兜底图片');
+            return FALLBACK_AI_FISH_IMAGE;
+        }
 
         // 背景透明
         ctx.clearRect(0, 0, size, size);
@@ -181,7 +193,31 @@ export class AISpawner extends Component {
         ctx.fillStyle = '#FF6666';
         ctx.fill();
 
-        return canvas.toDataURL('image/png');
+        if (typeof canvas.toDataURL === 'function') {
+            return canvas.toDataURL('image/png');
+        }
+
+        return FALLBACK_AI_FISH_IMAGE;
+    }
+
+    private createCanvas(size: number): any | null {
+        const globalObj = globalThis as any;
+        const doc = globalObj.document as any;
+        if (doc && typeof doc.createElement === 'function') {
+            return doc.createElement('canvas');
+        }
+
+        const wx = globalObj.wx;
+        if (wx && typeof wx.createOffscreenCanvas === 'function') {
+            try {
+                const offscreen = wx.createOffscreenCanvas({ type: '2d', width: size, height: size });
+                return offscreen;
+            } catch (error) {
+                console.warn('[AISpawner] createOffscreenCanvas failed:', error);
+            }
+        }
+
+        return null;
     }
 
     /**

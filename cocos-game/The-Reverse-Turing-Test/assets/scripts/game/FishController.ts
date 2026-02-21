@@ -102,10 +102,14 @@ export class FishController extends Component {
      * 加载 Base64 图片
      */
     private loadBase64Image(base64: string): void {
-        const img = new Image();
-        img.onload = () => {
+        assetManager.loadRemote<ImageAsset>(base64, (err, imageAsset) => {
+            if (err) {
+                console.error('[FishController] Load base64 image failed:', err);
+                return;
+            }
+
             const texture = new Texture2D();
-            texture.image = new ImageAsset(img);
+            texture.image = imageAsset;
 
             const spriteFrame = new SpriteFrame();
             spriteFrame.texture = texture;
@@ -113,8 +117,7 @@ export class FishController extends Component {
             if (this.fishSprite) {
                 this.fishSprite.spriteFrame = spriteFrame;
             }
-        };
-        img.src = base64;
+        });
     }
 
     /**

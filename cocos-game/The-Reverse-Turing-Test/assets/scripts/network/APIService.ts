@@ -6,7 +6,7 @@
  */
 
 import { sys } from 'cc';
-import { ENV_CONFIG, NETWORK_CONFIG } from '../data/GameConstants';
+import { ENV_CONFIG, NETWORK_CONFIG, ONLINE_FEATURES } from '../data/GameConstants';
 import { ThemeConfig } from '../data/GameTypes';
 import { DataConverter } from './DataConverter';
 
@@ -120,8 +120,8 @@ export class APIService {
         body?: any
     ): Promise<T> {
         return new Promise((resolve, reject) => {
-            // @ts-ignore - wx 是微信小游戏全局对象
-            const wx = (window as any).wx;
+            const globalObj = globalThis as any;
+            const wx = globalObj.wx || (typeof window !== 'undefined' ? (window as any).wx : null);
             if (!wx) {
                 reject(new Error('WeChat API not available'));
                 return;
@@ -157,6 +157,10 @@ export class APIService {
         path: string,
         body?: any
     ): Promise<T> {
+        if (!ONLINE_FEATURES.ENABLED) {
+            throw new Error('[APIService] ONLINE_FEATURES.ENABLED=false，已禁用联网请求');
+        }
+
         if (sys.platform === sys.Platform.WECHAT_GAME) {
             return this.weChatRequest(method, path, body);
         }

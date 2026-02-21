@@ -6,7 +6,7 @@ import { DataConverter } from './DataConverter';
 import {
     SyncStateResponse, FishEliminateData, ToastType
 } from '../data/GameTypes';
-import { ENV_CONFIG, NETWORK_CONFIG } from '../data/GameConstants';
+import { ENV_CONFIG, NETWORK_CONFIG, ONLINE_FEATURES } from '../data/GameConstants';
 
 const { ccclass } = _decorator;
 
@@ -41,7 +41,8 @@ class WxWebSocketAdapter {
 
     constructor(url: string, protocols?: string | string[]) {
         // @ts-ignore
-        const wx = (globalThis as any).wx || (window as any).wx;
+        const globalObj = globalThis as any;
+        const wx = globalObj.wx || (typeof window !== 'undefined' ? (window as any).wx : null);
         if (!wx) {
             console.error('[WxWebSocketAdapter] WeChat API not available');
             this._readyState = WebSocket.CLOSED;
@@ -160,6 +161,12 @@ export class SocketClient extends Component {
      * @param roomId 房间ID
      */
     async connect(roomId: string): Promise<void> {
+        if (!ONLINE_FEATURES.ENABLED) {
+            console.log('[SocketClient] ONLINE_FEATURES.ENABLED=false，跳过连接');
+            GameManager.instance?.showToast(ToastType.INFO, '当前为离线模式，未连接服务器');
+            return;
+        }
+
         if (this._socket) {
             this.disconnect();
         }

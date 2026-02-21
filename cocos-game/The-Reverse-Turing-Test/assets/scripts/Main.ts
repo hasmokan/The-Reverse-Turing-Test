@@ -6,6 +6,7 @@ import { GameStage } from './game/GameStage';
 import { APIService } from './network/APIService';
 import { getPlatformAdapter, getSessionId } from './platform/PlatformAdapter';
 import { GamePhase, ToastType } from './data/GameTypes';
+import { ONLINE_FEATURES } from './data/GameConstants';
 
 const { ccclass, property } = _decorator;
 
@@ -36,29 +37,67 @@ export class Main extends Component {
     testThemeId: string = 'aquarium';
 
     async start() {
-        console.log('[Main] Game starting...');
+        try {
+            this.installRuntimeErrorHooks();
+            console.log('[Main] Game starting...');
 
-        // 1. 初始化平台适配器
-        const platform = getPlatformAdapter();
-        console.log(`[Main] Platform: ${platform.getPlatformName()}`);
+            // 1. 初始化平台适配器
+            const platform = getPlatformAdapter();
+            console.log(`[Main] Platform: ${platform.getPlatformName()}`);
 
-        // 2. 确保管理器组件已挂载
-        this.ensureManagers();
+            // 2. 确保管理器组件已挂载
+            this.ensureManagers();
 
-        // 3. 获取/生成 Session ID
-        const sessionId = await getSessionId();
-        GameManager.instance.setPlayerId(sessionId);
-        console.log(`[Main] Session ID: ${sessionId}`);
+            // 3. 获取/生成 Session ID
+            const sessionId = await getSessionId();
+            GameManager.instance.setPlayerId(sessionId);
+            console.log(`[Main] Session ID: ${sessionId}`);
 
-        // 4. 绑定全局事件
-        this.bindGlobalEvents();
+            // 4. 绑定全局事件
+            this.bindGlobalEvents();
 
-        // 5. 如果有测试配置，自动连接
-        if (this.testRoomCode || this.testThemeId) {
-            await this.autoConnect();
+            // 5. 如果开启联网且有测试配置，自动连接
+            if (ONLINE_FEATURES.ENABLED && (this.testRoomCode || this.testThemeId)) {
+                await this.autoConnect();
+            } else if (!ONLINE_FEATURES.ENABLED) {
+                console.log('[Main] ONLINE_FEATURES.ENABLED=false，跳过自动联网');
+            }
+
+            console.log('[Main] Game initialized');
+        } catch (error) {
+            // 避免启动阶段未捕获异常导致小游戏进程直接退出
+            console.error('[Main] Startup failed:', error);
+            GameManager.instance?.showToast(ToastType.ERROR, '启动失败，请重试');
+        }
+    }
+
+    private installRuntimeErrorHooks(): void {
+        const globalObj = globalThis as any;
+        if (globalObj.__RTT_ERROR_HOOKS_INSTALLED__) {
+            return;
+        }
+        globalObj.__RTT_ERROR_HOOKS_INSTALLED__ = true;
+
+        if (typeof globalObj.addEventListener === 'function') {
+            globalObj.addEventListener('error', (event: any) => {
+                console.error('[Runtime] uncaught error:', event?.error || event?.message || event);
+            });
+            globalObj.addEventListener('unhandledrejection', (event: any) => {
+                console.error('[Runtime] unhandled rejection:', event?.reason || event);
+            });
         }
 
-        console.log('[Main] Game initialized');
+        const wx = globalObj.wx;
+        if (wx && typeof wx.onError === 'function') {
+            wx.onError((err: any) => {
+                console.error('[Runtime][wx.onError]:', err);
+            });
+        }
+        if (wx && typeof wx.onUnhandledRejection === 'function') {
+            wx.onUnhandledRejection((err: any) => {
+                console.error('[Runtime][wx.onUnhandledRejection]:', err);
+            });
+        }
     }
 
     /**
@@ -130,6 +169,11 @@ export class Main extends Component {
      * 手动加入房间
      */
     async joinRoom(roomCode: string): Promise<boolean> {
+        if (!ONLINE_FEATURES.ENABLED) {
+            GameManager.instance.showToast(ToastType.INFO, '当前为离线模式，已禁用联网');
+            return false;
+        }
+
         try {
             GameManager.instance.setRoomId(roomCode);
             await SocketClient.instance.connect(roomCode);
@@ -145,6 +189,11 @@ export class Main extends Component {
      * 通过主题加入游戏
      */
     async joinByTheme(themeId: string): Promise<boolean> {
+        if (!ONLINE_FEATURES.ENABLED) {
+            GameManager.instance.showToast(ToastType.INFO, '当前为离线模式，已禁用联网');
+            return false;
+        }
+
         try {
             const room = await APIService.getOrCreateRoom(themeId);
             return await this.joinRoom(room.roomCode);

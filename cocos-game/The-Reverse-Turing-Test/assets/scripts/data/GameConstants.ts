@@ -18,6 +18,17 @@ export const ENV_CONFIG = {
     VISION_MODEL: 'step-1o-turbo-vision'
 };
 
+// ==================== 联网开关（统一入口） ====================
+
+/**
+ * 联网功能总开关
+ * - false: 禁用 REST / WebSocket 联网能力（本地单机流程不受影响）
+ * - true: 允许联网请求与 socket 连接
+ */
+export const ONLINE_FEATURES = {
+    ENABLED: false
+};
+
 // ==================== 战斗系统常量 ====================
 
 export const BATTLE_CONSTANTS = {
