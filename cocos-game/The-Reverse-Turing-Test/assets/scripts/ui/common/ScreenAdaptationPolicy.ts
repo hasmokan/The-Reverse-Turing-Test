@@ -1,4 +1,4 @@
-import { Canvas, Size, view } from cc;
+import { Canvas, Size, view } from 'cc';
 
 export interface ScreenAdaptationResult {
     fitWidth: boolean;
