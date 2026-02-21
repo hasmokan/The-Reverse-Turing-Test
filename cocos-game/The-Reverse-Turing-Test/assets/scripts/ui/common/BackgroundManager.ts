@@ -35,11 +35,11 @@ export class BackgroundManager extends Component {
 
     @property({
         type: FitMode,
-        tooltip: '适配模式:
+        tooltip: `适配模式:
 COVER - 覆盖屏幕
 CONTAIN - 完整显示
 STRETCH - 拉伸填满
-WIDTH_PRIORITY_STRETCH_HEIGHT - 宽不裁切，高度不足自动拉伸'
+WIDTH_PRIORITY_STRETCH_HEIGHT - 宽不裁切，高度不足自动拉伸`
     })
     fitMode: FitMode = FitMode.WIDTH_PRIORITY_STRETCH_HEIGHT;
 
