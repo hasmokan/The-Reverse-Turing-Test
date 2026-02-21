@@ -1,8 +1,9 @@
-import { _decorator, Component, Node, Prefab, director } from 'cc';
+import { _decorator, Component, Director, Node, Prefab, director } from 'cc';
 import { GameManager } from './core/GameManager';
 import { SocketClient } from './network/SocketClient';
 import { BattleSystem } from './game/BattleSystem';
 import { GameStage } from './game/GameStage';
+import { PresetFishSwimSpawner } from './game/PresetFishSwimSpawner';
 import { APIService } from './network/APIService';
 import { getPlatformAdapter, getSessionId } from './platform/PlatformAdapter';
 import { GamePhase, ToastType } from './data/GameTypes';
@@ -55,6 +56,7 @@ export class Main extends Component {
 
             // 4. 绑定全局事件
             this.bindGlobalEvents();
+            this.bindSceneEvents();
 
             // 5. 如果开启联网且有测试配置，自动连接
             if (ONLINE_FEATURES.ENABLED && (this.testRoomCode || this.testThemeId)) {
@@ -138,6 +140,62 @@ export class Main extends Component {
 
         // 监听鱼点击
         gm.events.on(GameManager.EVENT.FISH_CLICKED, this.onFishClicked, this);
+    }
+
+    private bindSceneEvents(): void {
+        director.on(Director.EVENT_AFTER_SCENE_LAUNCH, this.onAfterSceneLaunch, this);
+        this.onAfterSceneLaunch();
+    }
+
+    private onAfterSceneLaunch(): void {
+        const scene = director.getScene();
+        if (!scene || scene.name !== 'MultiPlayerScene') {
+            return;
+        }
+
+        const container = this.findNodeByName(scene, 'FishSwinContainer')
+            || this.findNodeByName(scene, 'FishSwimContainer')
+            || this.findNodeByName(scene, 'FishContainer');
+
+        if (this.hasActivePresetSpawner(scene)) {
+            return;
+        }
+
+        const host = this.findNodeByName(scene, 'Canvas') || scene;
+        let spawner = host.getComponent(PresetFishSwimSpawner);
+        if (!spawner) {
+            spawner = host.addComponent(PresetFishSwimSpawner);
+        }
+        if (container) {
+            spawner.fishSwimContainer = container;
+        } else {
+            console.warn('[Main] Swim container not found, PresetFishSwimSpawner will retry/fallback.');
+        }
+    }
+
+    private hasActivePresetSpawner(root: Node): boolean {
+        if (root.getComponent(PresetFishSwimSpawner) && root.activeInHierarchy) {
+            return true;
+        }
+        for (const child of root.children) {
+            if (this.hasActivePresetSpawner(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private findNodeByName(root: Node, name: string): Node | null {
+        if (root.name === name) {
+            return root;
+        }
+        for (const child of root.children) {
+            const found = this.findNodeByName(child, name);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
     }
 
     /**
@@ -257,5 +315,6 @@ export class Main extends Component {
             gm.events.off(GameManager.EVENT.GAME_RESULT, this.onGameResult, this);
             gm.events.off(GameManager.EVENT.FISH_CLICKED, this.onFishClicked, this);
         }
+        director.off(Director.EVENT_AFTER_SCENE_LAUNCH, this.onAfterSceneLaunch, this);
     }
 }

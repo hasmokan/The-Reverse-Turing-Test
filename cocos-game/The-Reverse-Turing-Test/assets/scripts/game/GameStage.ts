@@ -6,6 +6,7 @@ import { GameManager } from '../core/GameManager';
 import { FishController } from './FishController';
 import { GameItem, EliminationData, ToastType } from '../data/GameTypes';
 import { BUBBLE_CONFIG, PHYSICS_CONFIG } from '../data/GameConstants';
+import { PresetFishSwimSpawner } from './PresetFishSwimSpawner';
 
 const { ccclass, property } = _decorator;
 
@@ -32,6 +33,9 @@ export class GameStage extends Component {
     @property(Node)
     bubbleContainer: Node = null!;
 
+    @property(Node)
+    fishSwimContainer: Node = null!;
+
     @property(Sprite)
     turbidityMask: Sprite = null!;  // 浑浊度遮罩
 
@@ -40,8 +44,42 @@ export class GameStage extends Component {
 
     start() {
         this.initBubbles();
+        this.ensurePresetFishSwimmer();
         this.bindEvents();
         this.initExistingItems();
+    }
+
+    private ensurePresetFishSwimmer(): void {
+        const sceneRoot = this.node.scene;
+        if (sceneRoot && this.hasActivePresetSpawner(sceneRoot)) {
+            return;
+        }
+
+        let spawner = this.node.getComponent(PresetFishSwimSpawner);
+        if (!spawner) {
+            spawner = this.node.addComponent(PresetFishSwimSpawner);
+        }
+
+        if (this.fishSwimContainer && this.fishSwimContainer.isValid && this.fishSwimContainer.activeInHierarchy) {
+            spawner.fishSwimContainer = this.fishSwimContainer;
+        } else if (this.fishContainer && this.fishContainer.isValid && this.fishContainer.activeInHierarchy) {
+            // Keep compatibility for old scenes where fish swim container was not exposed.
+            spawner.fishSwimContainer = this.fishContainer;
+        }
+    }
+
+    private hasActivePresetSpawner(root: Node): boolean {
+        if (root !== this.node && root.getComponent(PresetFishSwimSpawner) && root.activeInHierarchy) {
+            return true;
+        }
+
+        for (const child of root.children) {
+            if (this.hasActivePresetSpawner(child)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
