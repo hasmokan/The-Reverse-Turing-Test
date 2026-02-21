@@ -85,3 +85,23 @@ test("MultiPlayerScene has baseline adaptation structure", () => {
   const drawingPhase = findNodeByName(scene, "DrawingPhaseUI");
   assert.ok(drawingPhase, "MultiPlayerScene must contain DrawingPhaseUI node");
 });
+
+
+test("MainScene TransitionLayer is fullscreen aligned", () => {
+  const scene = readScene("assets/scenes/MainScene.scene");
+  const transitionLayer = findNodeByName(scene, "TransitionLayer");
+  assert.ok(transitionLayer, "MainScene must contain TransitionLayer node");
+
+  const widget = findComponentByPredicate(
+    scene,
+    transitionLayer,
+    (comp) => comp.__type__ === "cc.Widget"
+  );
+
+  assert.ok(widget, "TransitionLayer should include cc.Widget for fullscreen alignment");
+  assert.equal(widget._alignFlags, 15);
+  assert.equal(widget._left, 0);
+  assert.equal(widget._right, 0);
+  assert.equal(widget._top, 0);
+  assert.equal(widget._bottom, 0);
+});
