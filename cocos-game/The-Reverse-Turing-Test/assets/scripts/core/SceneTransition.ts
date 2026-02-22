@@ -1,4 +1,4 @@
-import { _decorator, Component, director, Node, Sprite, Color, tween, Vec3, UIOpacity, macro, BlockInputEvents, assetManager } from 'cc';
+import { _decorator, Component, director, Node, Sprite, Color, tween, Vec3, UIOpacity, macro, BlockInputEvents, assetManager, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -57,7 +57,7 @@ export class SceneTransition extends Component {
     public loadScene(sceneName: string, transitionType: TransitionType = TransitionType.FADE, duration: number = 0.5, bundleName?: string) {
         // 检查 transitionLayer 是否有效
         if (!this.transitionLayer || !this.transitionLayer.isValid) {
-            console.error('TransitionLayer 无效，直接切换场景');
+            ccError('TransitionLayer 无效，直接切换场景');
             this.loadSceneInternal(sceneName, bundleName);
             return;
         }
@@ -92,16 +92,16 @@ export class SceneTransition extends Component {
     private loadSceneInternal(sceneName: string, bundleName?: string, onComplete?: () => void) {
         if (bundleName) {
             // 场景在分包中，先加载分包
-            console.log(`加载分包: ${bundleName}`);
+            ccLog(`加载分包: ${bundleName}`);
             assetManager.loadBundle(bundleName, (err, bundle) => {
                 if (err) {
-                    console.error(`分包 ${bundleName} 加载失败:`, err);
+                    ccError(`分包 ${bundleName} 加载失败:`, err);
                     // 降级：尝试直接加载场景
                     director.loadScene(sceneName, onComplete);
                     return;
                 }
 
-                console.log(`分包 ${bundleName} 加载成功，加载场景: ${sceneName}`);
+                ccLog(`分包 ${bundleName} 加载成功，加载场景: ${sceneName}`);
                 director.loadScene(sceneName, onComplete);
             });
         } else {
@@ -158,7 +158,7 @@ export class SceneTransition extends Component {
     private fadeOut(duration: number, callback: () => void) {
         // 检查 transitionLayer 是否有效
         if (!this.transitionLayer || !this.transitionLayer.isValid) {
-            console.warn('TransitionLayer 无效，跳过淡出动画');
+            ccWarn('TransitionLayer 无效，跳过淡出动画');
             callback();
             return;
         }

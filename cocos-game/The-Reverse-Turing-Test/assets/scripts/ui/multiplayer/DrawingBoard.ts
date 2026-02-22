@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Graphics, EventTouch, Input, UITransform, Vec2, Vec3, Camera, Color, Button, RenderTexture, SpriteFrame, Sprite, Label } from 'cc';
+import { _decorator, Component, Node, Graphics, EventTouch, Input, UITransform, Vec2, Vec3, Camera, Color, Button, RenderTexture, SpriteFrame, Sprite, Label, log as ccLog, error as ccError } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -180,7 +180,7 @@ export class DrawingBoard extends Component {
      * 提交绘画，生成自定义鱼
      */
     private onSubmit() {
-        console.log('提交绘画，生成自定义鱼');
+        ccLog('提交绘画，生成自定义鱼');
 
         // 生成纹理
         const spriteFrame = this.captureSpriteFrame();
@@ -230,11 +230,11 @@ export class DrawingBoard extends Component {
             const spriteFrame = new SpriteFrame();
             spriteFrame.texture = renderTexture;
 
-            console.log('成功捕获画布内容为纹理');
+            ccLog('成功捕获画布内容为纹理');
             return spriteFrame;
 
         } catch (error) {
-            console.error('捕获画布内容失败:', error);
+            ccError('捕获画布内容失败:', error);
             return null;
         }
     }

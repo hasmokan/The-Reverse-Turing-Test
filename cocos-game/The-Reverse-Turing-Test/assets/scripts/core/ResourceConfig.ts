@@ -36,6 +36,7 @@ export class ResourceConfig {
         'icon_gear2': '灰色齿轮图标2',
         'icon_brain': '肉色大脑图标',
         'icon_bulb': '黄色灯泡图标',
+        'draw_a_fish': 'draw_a_fish',
     };
 
     /**
@@ -128,6 +129,13 @@ export class ResourceConfig {
             type: 'image',
             preload: true
         },
+        {
+            key: "draw_a_fish",
+            bundlePath: "draw_a_fish/spriteFrame",
+            remoteUrl: `${ResourceConfig.COS_BASE_URL}/%E7%94%BB%E4%B8%80%E6%9D%A1%E9%B1%BC%E6%8C%89%E9%92%AE.png`,
+            type: 'image',
+            preload: true
+        }
     ];
 
     /**

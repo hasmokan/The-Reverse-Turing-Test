@@ -1,4 +1,4 @@
-import { _decorator, Component, Button } from 'cc';
+import { _decorator, Component, Button, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 
 const { ccclass, property } = _decorator;
@@ -34,16 +34,16 @@ export class SceneSwitcher extends Component {
 
     private onButtonClick() {
         if (!this.targetScene) {
-            console.warn('未设置目标场景名称');
+            ccWarn('未设置目标场景名称');
             return;
         }
 
         if (!SceneTransition.instance) {
-            console.error('SceneTransition 实例未找到！');
+            ccError('SceneTransition 实例未找到！');
             return;
         }
 
-        console.log(`切换到场景: ${this.targetScene}`);
+        ccLog(`切换到场景: ${this.targetScene}`);
         SceneTransition.instance.loadScene(
             this.targetScene,
             this.transitionType as TransitionType,
@@ -56,7 +56,7 @@ export class SceneSwitcher extends Component {
      */
     public switchToScene(sceneName: string, type?: TransitionType, duration?: number) {
         if (!SceneTransition.instance) {
-            console.error('SceneTransition 实例未找到！');
+            ccError('SceneTransition 实例未找到！');
             return;
         }
 

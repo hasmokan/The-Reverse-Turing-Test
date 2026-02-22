@@ -1,4 +1,4 @@
-import { _decorator, Component, Button } from 'cc';
+import { _decorator, Component, Button, log as ccLog, warn as ccWarn } from 'cc';
 import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 const { ccclass, property } = _decorator;
 
@@ -22,13 +22,13 @@ export class BackToMenuHandler extends Component {
      * 点击返回按钮
      */
     private onBackClick() {
-        console.log('返回主菜单');
+        ccLog('返回主菜单');
 
         // 使用淡入淡出效果返回主菜单
         if (SceneTransition.instance) {
             SceneTransition.instance.loadScene('MainScene', TransitionType.FADE, 0.8);
         } else {
-            console.warn('SceneTransition 实例不存在，使用默认方式切换场景');
+            ccWarn('SceneTransition 实例不存在，使用默认方式切换场景');
             // 降级处理：直接切换场景
             const { director } = require('cc');
             director.loadScene('MainScene');

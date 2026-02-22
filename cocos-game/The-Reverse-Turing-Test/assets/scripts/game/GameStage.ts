@@ -1,6 +1,7 @@
 import {
     _decorator, Component, Node, Prefab, instantiate,
-    Vec3, UITransform, tween, Sprite, Color
+    Vec3, UITransform, tween, Sprite, Color,
+    warn as ccWarn,
 } from 'cc';
 import { GameManager } from '../core/GameManager';
 import { FishController } from './FishController';
@@ -217,7 +218,7 @@ export class GameStage extends Component {
      */
     private createFishNode(item: GameItem): void {
         if (!this.fishPrefab || !this.fishContainer) {
-            console.warn('[GameStage] fishPrefab or fishContainer not set');
+            ccWarn('[GameStage] fishPrefab or fishContainer not set');
             return;
         }
 

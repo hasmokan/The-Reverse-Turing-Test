@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, director, Color, find } from 'cc';
+import { _decorator, Component, Node, Sprite, director, Color, find, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 import { ResourceLoader } from './ResourceLoader';
 import { LoadingScreen } from '../ui/common/LoadingScreen';
 import { ResourceConfig } from './ResourceConfig';
@@ -28,7 +28,7 @@ export class GameBootstrap extends Component {
     private _hasCompleted = false;
 
     async start() {
-        console.log('[GameBootstrap] 游戏启动中...');
+        ccLog('[GameBootstrap] 游戏启动中...');
 
         // 隐藏主菜单，显示加载屏幕
         if (this.mainMenuNode) {
@@ -42,7 +42,7 @@ export class GameBootstrap extends Component {
         // 启动兜底超时，防止资源层异常导致一直卡在加载页
         this.scheduleOnce(() => {
             if (!this._hasCompleted) {
-                console.warn('[GameBootstrap] 加载兜底触发，强制进入主菜单');
+                ccWarn('[GameBootstrap] 加载兜底触发，强制进入主菜单');
                 this.onLoadComplete();
             }
         }, 20);
@@ -51,7 +51,7 @@ export class GameBootstrap extends Component {
             // 预加载资源
             await this.preloadResources();
         } catch (error) {
-            console.error('[GameBootstrap] 启动阶段异常:', error);
+            ccError('[GameBootstrap] 启动阶段异常:', error);
         }
 
         // 加载完成
@@ -63,11 +63,11 @@ export class GameBootstrap extends Component {
      */
     private async preloadResources(): Promise<void> {
         if (!this.resourceLoader) {
-            console.error('[GameBootstrap] ResourceLoader 未找到');
+            ccError('[GameBootstrap] ResourceLoader 未找到');
             return;
         }
 
-        console.log('[GameBootstrap] 开始预加载资源...');
+        ccLog('[GameBootstrap] 开始预加载资源...');
 
         try {
             const result = await this.resourceLoader.preloadResources(
@@ -80,18 +80,18 @@ export class GameBootstrap extends Component {
                 }
             );
 
-            console.log(`[GameBootstrap] 资源加载完成: 成功 ${result.loaded}, 失败 ${result.failed}`);
+            ccLog(`[GameBootstrap] 资源加载完成: 成功 ${result.loaded}, 失败 ${result.failed}`);
 
             // 如果有加载失败的资源，打印错误信息
             if (result.errors.length > 0) {
-                console.warn('[GameBootstrap] 加载失败的资源:', result.errors);
+                ccWarn('[GameBootstrap] 加载失败的资源:', result.errors);
             }
 
             // 应用所有远程图片
             this.applyRemoteImages();
 
         } catch (error) {
-            console.error('[GameBootstrap] 资源加载异常:', error);
+            ccError('[GameBootstrap] 资源加载异常:', error);
             if (this.loadingScreen) {
                 this.loadingScreen.setError('资源加载失败');
             }
@@ -106,7 +106,7 @@ export class GameBootstrap extends Component {
 
         const canvas = find('Canvas');
         if (!canvas) {
-            console.warn('[GameBootstrap] 未找到 Canvas 节点');
+            ccWarn('[GameBootstrap] 未找到 Canvas 节点');
             return;
         }
 
@@ -116,19 +116,19 @@ export class GameBootstrap extends Component {
         for (const [key, nodeName] of Object.entries(mapping)) {
             const spriteFrame = this.resourceLoader.getSpriteFrame(key);
             if (!spriteFrame) {
-                console.warn(`[GameBootstrap] 未找到远程资源: ${key}`);
+                ccWarn(`[GameBootstrap] 未找到远程资源: ${key}`);
                 continue;
             }
 
             const targetNode = this.findNodeByName(canvas, nodeName);
             if (!targetNode) {
-                console.warn(`[GameBootstrap] 未找到节点: ${nodeName}`);
+                ccWarn(`[GameBootstrap] 未找到节点: ${nodeName}`);
                 continue;
             }
 
             const sprite = targetNode.getComponent(Sprite);
             if (!sprite) {
-                console.warn(`[GameBootstrap] 节点 ${nodeName} 没有 Sprite 组件`);
+                ccWarn(`[GameBootstrap] 节点 ${nodeName} 没有 Sprite 组件`);
                 continue;
             }
 
@@ -144,7 +144,7 @@ export class GameBootstrap extends Component {
             applied++;
         }
 
-        console.log(`[GameBootstrap] 已应用 ${applied}/${Object.keys(mapping).length} 个远程图片`);
+        ccLog(`[GameBootstrap] 已应用 ${applied}/${Object.keys(mapping).length} 个远程图片`);
     }
 
     /**
@@ -169,7 +169,7 @@ export class GameBootstrap extends Component {
         this._hasCompleted = true;
         this._isReady = true;
 
-        console.log('[GameBootstrap] 所有资源加载完成');
+        ccLog('[GameBootstrap] 所有资源加载完成');
 
         // 隐藏加载屏幕
         if (this.loadingScreen) {
@@ -179,7 +179,7 @@ export class GameBootstrap extends Component {
                     this.mainMenuNode.active = true;
                 }
 
-                console.log('[GameBootstrap] 游戏已准备就绪');
+                ccLog('[GameBootstrap] 游戏已准备就绪');
             });
         } else {
             // 如果没有加载屏幕，直接显示主菜单

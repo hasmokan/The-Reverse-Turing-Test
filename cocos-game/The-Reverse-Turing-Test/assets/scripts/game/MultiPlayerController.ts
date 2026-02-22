@@ -13,6 +13,8 @@ import {
     Vec3,
     tween,
     director,
+    warn as ccWarn,
+    error as ccError,
 } from 'cc';
 import { GameManager } from '../core/GameManager';
 import { BattleSystem, LocalBattleCallbacks } from './BattleSystem';
@@ -49,7 +51,7 @@ const AUTO_FISH_DESC = [
 /**
  * 单人游戏阶段
  */
-enum SinglePlayerPhase {
+enum MultiPlayerPhase {
     DRAWING = 'drawing',
     VIEWING = 'viewing',
     VOTING = 'voting',
@@ -68,8 +70,8 @@ enum SinglePlayerPhase {
  * - 本地投票处理
  * - 胜负判定
  */
-@ccclass('SinglePlayerController')
-export class SinglePlayerController extends Component {
+@ccclass('MultiPlayerController')
+export class MultiPlayerController extends Component {
 
     // ==================== 场景节点引用 ====================
 
@@ -105,7 +107,7 @@ export class SinglePlayerController extends Component {
 
     // ==================== 状态 ====================
 
-    private _phase: SinglePlayerPhase = SinglePlayerPhase.DRAWING;
+    private _phase: MultiPlayerPhase = MultiPlayerPhase.DRAWING;
     private _playerFishCount: number = 0;
     private _humanKilledCount: number = 0;
     private _aiKilledCount: number = 0;
@@ -136,7 +138,7 @@ export class SinglePlayerController extends Component {
         this.initKillFeed();
         this.bindButtons();
         this.setupBasicUI();
-        this.setPhase(SinglePlayerPhase.DRAWING);
+        this.setPhase(MultiPlayerPhase.DRAWING);
     }
 
     start() {
@@ -157,7 +159,7 @@ export class SinglePlayerController extends Component {
     private initGameManager(): void {
         const gm = GameManager.instance;
         if (!gm) {
-            console.error('[SinglePlayerController] GameManager not found');
+            ccError('[MultiPlayerController] GameManager not found');
             return;
         }
 
@@ -170,7 +172,7 @@ export class SinglePlayerController extends Component {
     private initBattleSystem(): void {
         const bs = BattleSystem.instance;
         if (!bs) {
-            console.error('[SinglePlayerController] BattleSystem not found');
+            ccError('[MultiPlayerController] BattleSystem not found');
             return;
         }
 
@@ -204,7 +206,7 @@ export class SinglePlayerController extends Component {
         if (!node) return null;
         const button = node.getComponent(Button);
         if (!button) {
-            console.warn(`[SinglePlayerController] ${fieldName} 未绑定 Button 组件: ${node.name}`);
+            ccWarn(`[MultiPlayerController] ${fieldName} 未绑定 Button 组件: ${node.name}`);
         }
         return button;
     }
@@ -214,7 +216,7 @@ export class SinglePlayerController extends Component {
         if (target instanceof Node) return target;
         const componentNode = (target as Button).node;
         if (componentNode) return componentNode;
-        console.warn(`[SinglePlayerController] ${fieldName} 不是有效的 Node/Button 引用`);
+        ccWarn(`[MultiPlayerController] ${fieldName} 不是有效的 Node/Button 引用`);
         return null;
     }
 
@@ -405,12 +407,12 @@ export class SinglePlayerController extends Component {
 
     // ==================== 阶段管理 ====================
 
-    private setPhase(phase: SinglePlayerPhase): void {
+    private setPhase(phase: MultiPlayerPhase): void {
         this._phase = phase;
         const gm = GameManager.instance;
 
         switch (phase) {
-            case SinglePlayerPhase.DRAWING:
+            case MultiPlayerPhase.DRAWING:
                 if (gm) gm.setPhase(GamePhase.DRAWING);
                 this.setUINodeVisibility(this.drawingPhaseUI, true);
                 this.setUINodeVisibility(this.gamePhaseUI, false);
@@ -418,7 +420,7 @@ export class SinglePlayerController extends Component {
                 this.hideLoadingOverlay(true);
                 break;
 
-            case SinglePlayerPhase.VIEWING:
+            case MultiPlayerPhase.VIEWING:
                 if (gm) gm.setPhase(GamePhase.VIEWING);
                 this.setUINodeVisibility(this.drawingPhaseUI, false);
                 this.setUINodeVisibility(this.gamePhaseUI, true);
@@ -428,17 +430,17 @@ export class SinglePlayerController extends Component {
                 this.showLoadingOverlay(2.4);
                 this.scheduleOnce(() => {
                     this.hideLoadingOverlay();
-                    this.setPhase(SinglePlayerPhase.VOTING);
+                    this.setPhase(MultiPlayerPhase.VOTING);
                 }, 2.4);
                 break;
 
-            case SinglePlayerPhase.VOTING:
+            case MultiPlayerPhase.VOTING:
                 if (gm) gm.setPhase(GamePhase.VOTING);
                 this.updateDrawPanelToggleState();
                 gm?.showToast(ToastType.INFO, '投票阶段开始！点击鱼并选择“就是它！”');
                 break;
 
-            case SinglePlayerPhase.GAMEOVER:
+            case MultiPlayerPhase.GAMEOVER:
                 if (gm) gm.setPhase(GamePhase.GAMEOVER);
                 this.setUINodeVisibility(this.gamePhaseUI, true);
                 this.updateDrawPanelToggleState();
@@ -450,7 +452,7 @@ export class SinglePlayerController extends Component {
     // ==================== 画板事件 ====================
 
     private onDrawingCompleted(spriteFrame: SpriteFrame): void {
-        if (this._phase !== SinglePlayerPhase.DRAWING) return;
+        if (this._phase !== MultiPlayerPhase.DRAWING) return;
 
         const gm = GameManager.instance;
         if (!gm) return;
@@ -505,7 +507,7 @@ export class SinglePlayerController extends Component {
 
         if (this._isDrawingFromGamePhase) {
             this._isDrawingFromGamePhase = false;
-            this.setPhase(SinglePlayerPhase.VOTING);
+            this.setPhase(MultiPlayerPhase.VOTING);
             return;
         }
 
@@ -556,7 +558,7 @@ export class SinglePlayerController extends Component {
 
         this._hasGameStarted = true;
         this.setDrawPanelVisible(false, false);
-        this.setPhase(SinglePlayerPhase.VIEWING);
+        this.setPhase(MultiPlayerPhase.VIEWING);
     }
 
     private onDrawMore(): void {
@@ -570,9 +572,9 @@ export class SinglePlayerController extends Component {
             return;
         }
 
-        this._isDrawingFromGamePhase = this._hasGameStarted && this._phase !== SinglePlayerPhase.DRAWING;
-        if (this._phase !== SinglePlayerPhase.DRAWING) {
-            this.setPhase(SinglePlayerPhase.DRAWING);
+        this._isDrawingFromGamePhase = this._hasGameStarted && this._phase !== MultiPlayerPhase.DRAWING;
+        if (this._phase !== MultiPlayerPhase.DRAWING) {
+            this.setPhase(MultiPlayerPhase.DRAWING);
         }
         this.setDrawPanelVisible(true, true);
     }
@@ -689,7 +691,7 @@ export class SinglePlayerController extends Component {
 
     private checkGameEnd(): void {
         const gm = GameManager.instance;
-        if (!gm || this._phase === SinglePlayerPhase.GAMEOVER) return;
+        if (!gm || this._phase === MultiPlayerPhase.GAMEOVER) return;
 
         const items = gm.items;
         const aiCount = items.filter(i => i.isAI).length;
@@ -697,7 +699,7 @@ export class SinglePlayerController extends Component {
 
         // 胜利: AI 全灭 + 人类 >= 5
         if (aiCount === 0 && humanCount >= BATTLE_CONSTANTS.VICTORY_MIN_HUMAN_COUNT) {
-            this.setPhase(SinglePlayerPhase.GAMEOVER);
+            this.setPhase(MultiPlayerPhase.GAMEOVER);
             gm.setGameResult({
                 isVictory: true,
                 aiRemaining: 0,
@@ -709,7 +711,7 @@ export class SinglePlayerController extends Component {
 
         // 失败: AI 数量超过阈值
         if (aiCount > BATTLE_CONSTANTS.DEFEAT_MAX_AI_COUNT) {
-            this.setPhase(SinglePlayerPhase.GAMEOVER);
+            this.setPhase(MultiPlayerPhase.GAMEOVER);
             gm.setGameResult({
                 isVictory: false,
                 aiRemaining: aiCount,
@@ -721,7 +723,7 @@ export class SinglePlayerController extends Component {
 
         // 失败: 误杀人类 >= 3
         if (this._humanKilledCount >= BATTLE_CONSTANTS.MAX_HUMAN_KILLED) {
-            this.setPhase(SinglePlayerPhase.GAMEOVER);
+            this.setPhase(MultiPlayerPhase.GAMEOVER);
             gm.setGameResult({
                 isVictory: false,
                 aiRemaining: aiCount,
@@ -820,7 +822,7 @@ export class SinglePlayerController extends Component {
 
         const activeCount = this._ownedFishIds.size;
         const available = activeCount < MAX_ACTIVE_FISH;
-        const canShow = this._phase !== SinglePlayerPhase.GAMEOVER;
+        const canShow = this._phase !== MultiPlayerPhase.GAMEOVER;
         const drawMoreButton = this.getButtonComponent(node, 'drawMoreButton');
         node.active = canShow;
 

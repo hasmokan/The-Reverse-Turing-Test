@@ -1,5 +1,7 @@
 import { _decorator, Component, Node, Sprite, SpriteFrame, UITransform,
-         Vec3, tween, Tween, assetManager, Texture2D, ImageAsset } from 'cc';
+         Vec3, tween, Tween, assetManager, Texture2D, ImageAsset,
+ error as ccError,
+} from 'cc';
 import { GameManager } from '../core/GameManager';
 import { GameItem, ToastType } from '../data/GameTypes';
 import { PHYSICS_CONFIG, BATTLE_CONSTANTS } from '../data/GameConstants';
@@ -104,7 +106,7 @@ export class FishController extends Component {
     private loadBase64Image(base64: string): void {
         assetManager.loadRemote<ImageAsset>(base64, (err, imageAsset) => {
             if (err) {
-                console.error('[FishController] Load base64 image failed:', err);
+                ccError('[FishController] Load base64 image failed:', err);
                 return;
             }
 
@@ -126,7 +128,7 @@ export class FishController extends Component {
     private loadRemoteImage(url: string): void {
         assetManager.loadRemote<ImageAsset>(url, (err, imageAsset) => {
             if (err) {
-                console.error('[FishController] Load image failed:', err);
+                ccError('[FishController] Load image failed:', err);
                 return;
             }
 

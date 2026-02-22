@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, SpriteFrame, Vec3, tween, UITransform } from 'cc';
+import { _decorator, Component, Node, Sprite, SpriteFrame, Vec3, tween, UITransform, log as ccLog } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -36,7 +36,7 @@ export class CustomFish extends Component {
     public setTexture(spriteFrame: SpriteFrame) {
         if (this.fishSprite) {
             this.fishSprite.spriteFrame = spriteFrame;
-            console.log('设置自定义鱼纹理成功');
+            ccLog('设置自定义鱼纹理成功');
         }
     }
 

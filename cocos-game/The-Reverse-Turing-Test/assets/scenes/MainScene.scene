@@ -1213,7 +1213,7 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "targetScene": "SinglePlayerScene",
+    "targetScene": "MultiPlayerScene",
     "transitionType": "fade",
     "transitionDuration": 0.5,
     "_id": "98vRP9i+lJ5pfBhwrO+7vQ"

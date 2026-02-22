@@ -53,7 +53,7 @@
   - `SceneTransition.ts`：场景切换动画
 
 - `assets/scripts/game/`
-  - `SinglePlayerController.ts`：当前主编排器（本地模式）
+  - `MultiPlayerController.ts`：当前主编排器（本地模式）
   - `BattleSystem.ts`：投票/追击/换目标/CD
   - `AISpawner.ts`：AI 鱼自动生成
   - `GameStage.ts` / `FishController.ts`：舞台鱼节点、动效、投票反馈
@@ -94,7 +94,7 @@
 
 ### 4.3 MultiPlayerScene 的主玩法编排
 
-`SinglePlayerController.ts` 负责主要流程：
+`MultiPlayerController.ts` 负责主要流程：
 - 初始化 `GameManager`
 - 启用 `BattleSystem` 本地模式（不依赖 Socket）
 - 监听 `DrawingBoard` 提交
@@ -113,7 +113,7 @@
 - 改阶段状态与全局事件：`assets/scripts/core/GameManager.ts`
 - 改主菜单按钮去向：`assets/scripts/ui/main-menu/MenuButtonHandler.ts`
 - 改投票/追击/换目标：`assets/scripts/game/BattleSystem.ts`
-- 改单人主流程：`assets/scripts/game/SinglePlayerController.ts`
+- 改单人主流程：`assets/scripts/game/MultiPlayerController.ts`
 - 改远程 UI 图映射：`assets/scripts/core/ResourceConfig.ts`
 - 改资源加载策略：`assets/scripts/core/ResourceLoader.ts`
 - 改返回主菜单行为：`assets/scripts/ui/multiplayer/BackToMenuHandler.ts`
@@ -142,7 +142,7 @@
 ## 7. 常见坑（AI 容易踩）
 
 1. **直接手改 `.scene` JSON**：极易破坏引用，先用 MCP。
-2. **忘记区分本地模式/联网模式**：`SinglePlayerController` 与 `SocketClient` 的触发链不同。
+2. **忘记区分本地模式/联网模式**：`MultiPlayerController` 与 `SocketClient` 的触发链不同。
 3. **改了常量没验证联动**：例如 `ELIMINATION_THRESHOLD` 会影响 UI 反馈与结算节奏。
 4. **RemoteUI 映射改了但节点名不一致**：`NODE_MAPPING` 里的节点名必须和场景一致。
 5. **持久节点重复实例**：`GameManager`、`SocketClient` 等单例脚本要防重。

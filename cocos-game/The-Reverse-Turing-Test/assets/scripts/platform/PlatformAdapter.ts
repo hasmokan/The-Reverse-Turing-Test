@@ -7,7 +7,7 @@
  * - 微信小游戏
  */
 
-import { sys } from 'cc';
+import { sys, log as ccLog, error as ccError } from 'cc';
 import { PLATFORM } from '../data/GameConstants';
 
 // ==================== 平台适配器接口 ====================
@@ -79,7 +79,7 @@ export class WebAdapter implements IPlatformAdapter {
         try {
             return localStorage.getItem(key);
         } catch (e) {
-            console.error('[WebAdapter] getStorage failed:', e);
+            ccError('[WebAdapter] getStorage failed:', e);
             return null;
         }
     }
@@ -88,7 +88,7 @@ export class WebAdapter implements IPlatformAdapter {
         try {
             localStorage.setItem(key, value);
         } catch (e) {
-            console.error('[WebAdapter] setStorage failed:', e);
+            ccError('[WebAdapter] setStorage failed:', e);
         }
     }
 
@@ -96,7 +96,7 @@ export class WebAdapter implements IPlatformAdapter {
         try {
             localStorage.removeItem(key);
         } catch (e) {
-            console.error('[WebAdapter] removeStorage failed:', e);
+            ccError('[WebAdapter] removeStorage failed:', e);
         }
     }
 
@@ -140,13 +140,13 @@ export class WebAdapter implements IPlatformAdapter {
                 text: PLATFORM.SHARE.DESC,
                 url: currentUrl + (options.query ? `?${options.query}` : '')
             }).catch(err => {
-                console.log('[WebAdapter] Share failed:', err);
+                ccLog('[WebAdapter] Share failed:', err);
             });
         } else {
             // 复制链接到剪贴板
             const url = currentUrl + (options.query ? `?${options.query}` : '');
             this.setClipboard(url);
-            console.log('[WebAdapter] Share link copied to clipboard');
+            ccLog('[WebAdapter] Share link copied to clipboard');
         }
     }
 
@@ -182,7 +182,7 @@ export class WeChatAdapter implements IPlatformAdapter {
         const globalObj = globalThis as any;
         this.wx = globalObj.wx || (typeof window !== 'undefined' ? (window as any).wx : null);
         if (!this.wx) {
-            console.error('[WeChatAdapter] WeChat API not available');
+            ccError('[WeChatAdapter] WeChat API not available');
         }
     }
 
@@ -198,7 +198,7 @@ export class WeChatAdapter implements IPlatformAdapter {
         try {
             return this.wx.getStorageSync(key) || null;
         } catch (e) {
-            console.error('[WeChatAdapter] getStorage failed:', e);
+            ccError('[WeChatAdapter] getStorage failed:', e);
             return null;
         }
     }
@@ -207,7 +207,7 @@ export class WeChatAdapter implements IPlatformAdapter {
         try {
             this.wx.setStorageSync(key, value);
         } catch (e) {
-            console.error('[WeChatAdapter] setStorage failed:', e);
+            ccError('[WeChatAdapter] setStorage failed:', e);
         }
     }
 
@@ -215,7 +215,7 @@ export class WeChatAdapter implements IPlatformAdapter {
         try {
             this.wx.removeStorageSync(key);
         } catch (e) {
-            console.error('[WeChatAdapter] removeStorage failed:', e);
+            ccError('[WeChatAdapter] removeStorage failed:', e);
         }
     }
 
@@ -228,7 +228,7 @@ export class WeChatAdapter implements IPlatformAdapter {
                     resolve({ sessionId: `wx_${res.code}` });
                 },
                 fail: (err: any) => {
-                    console.error('[WeChatAdapter] login failed:', err);
+                    ccError('[WeChatAdapter] login failed:', err);
                     // 登录失败时生成临时 ID
                     resolve({ sessionId: `wx_temp_${Date.now()}` });
                 }
@@ -383,7 +383,7 @@ export function getPlatformAdapter(): IPlatformAdapter {
         _adapter = new WebAdapter();
     }
 
-    console.log(`[Platform] Using ${_adapter.getPlatformName()} adapter`);
+    ccLog(`[Platform] Using ${_adapter.getPlatformName()} adapter`);
     return _adapter;
 }
 

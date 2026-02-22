@@ -1,4 +1,4 @@
-import { _decorator, Component, ImageAsset, SpriteFrame, Texture2D } from 'cc';
+import { _decorator, Component, ImageAsset, SpriteFrame, Texture2D, warn as ccWarn } from 'cc';
 import { GameManager } from '../core/GameManager';
 
 const { ccclass } = _decorator;
@@ -132,7 +132,7 @@ export class AISpawner extends Component {
         const size = 120;
         const canvas = this.createCanvas(size);
         if (!canvas) {
-            console.warn('[AISpawner] 当前运行环境不支持 Canvas，使用兜底图片');
+            ccWarn('[AISpawner] 当前运行环境不支持 Canvas，使用兜底图片');
             return FALLBACK_AI_FISH_IMAGE;
         }
 
@@ -140,7 +140,7 @@ export class AISpawner extends Component {
         canvas.height = size;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-            console.warn('[AISpawner] Canvas 2D 上下文不可用，使用兜底图片');
+            ccWarn('[AISpawner] Canvas 2D 上下文不可用，使用兜底图片');
             return FALLBACK_AI_FISH_IMAGE;
         }
 
@@ -213,7 +213,7 @@ export class AISpawner extends Component {
                 const offscreen = wx.createOffscreenCanvas({ type: '2d', width: size, height: size });
                 return offscreen;
             } catch (error) {
-                console.warn('[AISpawner] createOffscreenCanvas failed:', error);
+                ccWarn('[AISpawner] createOffscreenCanvas failed:', error);
             }
         }
 

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button } from 'cc';
+import { _decorator, Component, Node, Button, log as ccLog } from 'cc';
 import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 const { ccclass, property } = _decorator;
 
@@ -43,7 +43,7 @@ export class MenuButtonHandler extends Component {
      * 点击单人游戏
      */
     private onSinglePlayerClick() {
-        console.log('点击单人游戏');
+        ccLog('点击单人游戏');
 
         // 使用淡入淡出效果切换到单人游戏场景
         if (SceneTransition.instance) {
@@ -55,7 +55,7 @@ export class MenuButtonHandler extends Component {
      * 点击深海鱼缸（多人）
      */
     private onMultiPlayerClick() {
-        console.log('点击深海鱼缸（多人）');
+        ccLog('点击深海鱼缸（多人）');
 
         // 使用从左滑入效果
         if (SceneTransition.instance) {
@@ -67,7 +67,7 @@ export class MenuButtonHandler extends Component {
      * 点击排行榜
      */
     private onRankingClick() {
-        console.log('点击排行榜');
+        ccLog('点击排行榜');
 
         // 使用缩放效果
         if (SceneTransition.instance) {
@@ -79,7 +79,7 @@ export class MenuButtonHandler extends Component {
      * 点击个人中心
      */
     private onProfileClick() {
-        console.log('点击个人中心');
+        ccLog('点击个人中心');
 
         // 使用从右滑入效果
         if (SceneTransition.instance) {

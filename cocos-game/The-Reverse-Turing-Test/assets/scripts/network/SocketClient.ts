@@ -1,4 +1,4 @@
-import { _decorator, Component, sys, game } from 'cc';
+import { _decorator, Component, sys, game, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 // 使用本地 TypeScript 包装模块
 import { io, Socket } from '../lib/socket-io';
 import { GameManager } from '../core/GameManager';
@@ -44,7 +44,7 @@ class WxWebSocketAdapter {
         const globalObj = globalThis as any;
         const wx = globalObj.wx || (typeof window !== 'undefined' ? (window as any).wx : null);
         if (!wx) {
-            console.error('[WxWebSocketAdapter] WeChat API not available');
+            ccError('[WxWebSocketAdapter] WeChat API not available');
             this._readyState = WebSocket.CLOSED;
             return;
         }
@@ -53,10 +53,10 @@ class WxWebSocketAdapter {
             url,
             protocols: Array.isArray(protocols) ? protocols : protocols ? [protocols] : undefined,
             success: () => {
-                console.log('[WxWebSocketAdapter] Connecting...');
+                ccLog('[WxWebSocketAdapter] Connecting...');
             },
             fail: (err: any) => {
-                console.error('[WxWebSocketAdapter] Connect failed:', err);
+                ccError('[WxWebSocketAdapter] Connect failed:', err);
                 this._readyState = WebSocket.CLOSED;
                 this.onerror?.({ message: err.errMsg });
             }
@@ -83,13 +83,13 @@ class WxWebSocketAdapter {
 
     send(data: string | ArrayBuffer): void {
         if (this._readyState !== WebSocket.OPEN) {
-            console.warn('[WxWebSocketAdapter] Socket not open');
+            ccWarn('[WxWebSocketAdapter] Socket not open');
             return;
         }
         this._wxSocket?.send({
             data,
             fail: (err: any) => {
-                console.error('[WxWebSocketAdapter] Send failed:', err);
+                ccError('[WxWebSocketAdapter] Send failed:', err);
             }
         });
     }
@@ -162,7 +162,7 @@ export class SocketClient extends Component {
      */
     async connect(roomId: string): Promise<void> {
         if (!ONLINE_FEATURES.ENABLED) {
-            console.log('[SocketClient] ONLINE_FEATURES.ENABLED=false，跳过连接');
+            ccLog('[SocketClient] ONLINE_FEATURES.ENABLED=false，跳过连接');
             GameManager.instance?.showToast(ToastType.INFO, '当前为离线模式，未连接服务器');
             return;
         }
@@ -176,7 +176,7 @@ export class SocketClient extends Component {
 
         try {
             const socketUrl = ENV_CONFIG.WS_URL;
-            console.log('[SocketClient] Connecting to:', socketUrl);
+            ccLog('[SocketClient] Connecting to:', socketUrl);
 
             // 微信小游戏使用适配器
             const WebSocketImpl = getWebSocketImpl();
@@ -195,13 +195,13 @@ export class SocketClient extends Component {
             } as any);
 
             this._socket.on('connect', () => {
-                console.log('[SocketClient] Connected, id:', this._socket?.id);
+                ccLog('[SocketClient] Connected, id:', this._socket?.id);
                 this._isConnected = true;
                 this._socket!.emit('room:join', { roomId: this._roomId });
             });
 
             this._socket.on('disconnect', (reason) => {
-                console.log('[SocketClient] Disconnected:', reason);
+                ccLog('[SocketClient] Disconnected:', reason);
                 this._isConnected = false;
                 if (reason === 'io server disconnect') {
                     this._socket!.connect();
@@ -209,12 +209,12 @@ export class SocketClient extends Component {
             });
 
             this._socket.on('connect_error', (error) => {
-                console.error('[SocketClient] Connection error:', error.message);
+                ccError('[SocketClient] Connection error:', error.message);
                 GameManager.instance.showToast(ToastType.ERROR, '连接服务器失败');
             });
 
             this._socket.io.on('reconnect', (attempt) => {
-                console.log('[SocketClient] Reconnected after', attempt, 'attempts');
+                ccLog('[SocketClient] Reconnected after', attempt, 'attempts');
                 GameManager.instance.showToast(ToastType.SUCCESS, '重新连接成功');
             });
 
@@ -230,7 +230,7 @@ export class SocketClient extends Component {
             this.registerEventListeners();
 
         } catch (error) {
-            console.error('[SocketClient] Failed to connect:', error);
+            ccError('[SocketClient] Failed to connect:', error);
             GameManager.instance.showToast(ToastType.ERROR, '连接服务器失败');
         }
     }
@@ -302,7 +302,7 @@ export class SocketClient extends Component {
     // ==================== 消息处理 ====================
 
     private handleSyncState(state: SyncStateResponse): void {
-        console.log('[SocketClient] sync:state received');
+        ccLog('[SocketClient] sync:state received');
         const gm = GameManager.instance;
 
         const items = DataConverter.convertItemList(state.items);
@@ -345,7 +345,7 @@ export class SocketClient extends Component {
      */
     emit(event: WSEventType, data?: any): void {
         if (!this._socket || !this._isConnected) {
-            console.warn('[SocketClient] Socket not connected');
+            ccWarn('[SocketClient] Socket not connected');
             return;
         }
         this._socket.emit(event, data);
@@ -356,7 +356,7 @@ export class SocketClient extends Component {
     castVote(fishId: string): void {
         const gm = GameManager.instance;
         if (!gm.playerId) {
-            console.warn('[SocketClient] Player ID not set');
+            ccWarn('[SocketClient] Player ID not set');
             return;
         }
         this.emit('vote:cast', { fishId, voterId: gm.playerId });

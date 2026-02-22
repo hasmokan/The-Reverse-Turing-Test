@@ -1,4 +1,4 @@
-import { _decorator, Component, Sprite, SpriteFrame, UITransform, view, Size, screen, Enum, assetManager, ImageAsset, Texture2D } from 'cc';
+import { _decorator, Component, Sprite, SpriteFrame, UITransform, view, Size, screen, Enum, assetManager, ImageAsset, Texture2D, log as ccLog, error as ccError } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
@@ -77,7 +77,7 @@ WIDTH_PRIORITY_STRETCH_HEIGHT - 宽不裁切，高度不足自动拉伸`
 
             assetManager.loadRemote<ImageAsset>(url, { ext }, (err, imageAsset) => {
                 if (err) {
-                    console.error('[BackgroundManager] 远程背景加载失败:', err);
+                    ccError('[BackgroundManager] 远程背景加载失败:', err);
                     resolve();
                     return;
                 }
@@ -88,7 +88,7 @@ WIDTH_PRIORITY_STRETCH_HEIGHT - 宽不裁切，高度不足自动拉伸`
                 spriteFrame.texture = texture;
 
                 this.changeBackground(spriteFrame);
-                console.log('[BackgroundManager] 远程背景已加载');
+                ccLog('[BackgroundManager] 远程背景已加载');
                 resolve();
             });
         });
@@ -143,7 +143,7 @@ WIDTH_PRIORITY_STRETCH_HEIGHT - 宽不裁切，高度不足自动拉伸`
 
         this.node.setPosition(0, 0, 0);
 
-        console.log(`[BackgroundManager] 屏幕适配完成:
+        ccLog(`[BackgroundManager] 屏幕适配完成:
             可见区域: ${visibleSize.width} x ${visibleSize.height}
             设计分辨率: ${designSize.width} x ${designSize.height}
             背景原始尺寸: ${imgSize.width} x ${imgSize.height}

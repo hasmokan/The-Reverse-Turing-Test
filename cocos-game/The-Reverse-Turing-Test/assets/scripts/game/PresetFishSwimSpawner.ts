@@ -8,7 +8,10 @@ import {
     Sprite,
     SpriteFrame,
     Texture2D,
-    UITransform
+    UITransform,
+    log as ccLog,
+    warn as ccWarn,
+    error as ccError,
 } from 'cc';
 import { PRESET_FISH_BASE64 } from '../data/PresetFishBase64';
 import { BackgroundFishSwimmer } from './BackgroundFishSwimmer';
@@ -72,7 +75,7 @@ export class PresetFishSwimSpawner extends Component {
 
         const entries = PRESET_FISH_BASE64.slice(0, this.spawnCount);
         if (entries.length === 0) {
-            console.warn('[PresetFishSwimSpawner] No preset fish base64 entries available.');
+            ccWarn('[PresetFishSwimSpawner] No preset fish base64 entries available.');
             return;
         }
 
@@ -109,18 +112,18 @@ export class PresetFishSwimSpawner extends Component {
         }
 
         this._spawned = true;
-        console.log(`[PresetFishSwimSpawner] Spawned ${spawnedCount}/${entries.length} fish.`);
+        ccLog(`[PresetFishSwimSpawner] Spawned ${spawnedCount}/${entries.length} fish.`);
     }
 
     private retryLater(reason: string): void {
         this._retryCount += 1;
         const sceneName = this.node.scene?.name ?? 'UnknownScene';
         if (this._retryCount > this.maxRetryCount) {
-            console.warn(`${reason} Scene=${sceneName}, retries exhausted.`);
+            ccWarn(`${reason} Scene=${sceneName}, retries exhausted.`);
             return;
         }
 
-        console.warn(`${reason} Scene=${sceneName}, retry ${this._retryCount}/${this.maxRetryCount}.`);
+        ccWarn(`${reason} Scene=${sceneName}, retry ${this._retryCount}/${this.maxRetryCount}.`);
         this.scheduleSpawnAttempt(this.retryIntervalSeconds);
     }
 
@@ -155,7 +158,7 @@ export class PresetFishSwimSpawner extends Component {
             'FishContainer'
         ]);
         if (inactiveFound) {
-            console.warn(`[PresetFishSwimSpawner] Found inactive swim container '${inactiveFound.name}', creating visible fallback.`);
+            ccWarn(`[PresetFishSwimSpawner] Found inactive swim container '${inactiveFound.name}', creating visible fallback.`);
         }
 
         return this.createFallbackSwimContainer(root);
@@ -188,7 +191,7 @@ export class PresetFishSwimSpawner extends Component {
 
         this.fishSwimContainer = container;
 
-        console.warn('[PresetFishSwimSpawner] Created fallback FishSwinContainer under Canvas.');
+        ccWarn('[PresetFishSwimSpawner] Created fallback FishSwinContainer under Canvas.');
         return container;
     }
 
@@ -238,15 +241,8 @@ export class PresetFishSwimSpawner extends Component {
             });
         }
 
-        return new Promise((resolve) => {
-            this.loadWithAssetManager(imageSource).then((spriteFrame) => {
-                if (spriteFrame) {
-                    resolve(spriteFrame);
-                    return;
-                }
-                void this.loadWithImageFactory(imageSource).then(resolve);
-            });
-        });
+        // For remote URL in browser, avoid Image() fallback to prevent WebGL tainted texture errors.
+        return this.loadWithAssetManager(imageSource);
     }
 
     private loadWithImageFactory(imageSource: string): Promise<SpriteFrame | null> {
@@ -295,7 +291,7 @@ export class PresetFishSwimSpawner extends Component {
                 }
                 settled = true;
                 cleanup();
-                console.warn('[PresetFishSwimSpawner] Image factory decode failed:', error);
+                ccWarn('[PresetFishSwimSpawner] Image factory decode failed:', error);
                 resolve(null);
             };
 
@@ -305,6 +301,8 @@ export class PresetFishSwimSpawner extends Component {
 
     private loadWithAssetManager(imageSource: string): Promise<SpriteFrame | null> {
         return new Promise((resolve) => {
+            const cleanUrl = imageSource.split('?')[0];
+            const ext = cleanUrl.match(/\.(png|jpg|jpeg|webp)$/i)?.[0] || '.png';
             let settled = false;
             const timeout = setTimeout(() => {
                 if (settled) {
@@ -314,14 +312,14 @@ export class PresetFishSwimSpawner extends Component {
                 resolve(null);
             }, 5000);
 
-            assetManager.loadRemote<ImageAsset>(imageSource, (err, imageAsset) => {
+            assetManager.loadRemote<ImageAsset>(imageSource, { ext }, (err, imageAsset) => {
                 if (settled) {
                     return;
                 }
                 settled = true;
                 clearTimeout(timeout);
                 if (err || !imageAsset) {
-                    console.error('[PresetFishSwimSpawner] Load image failed:', err);
+                    ccError('[PresetFishSwimSpawner] Load image failed:', err);
                     resolve(null);
                     return;
                 }

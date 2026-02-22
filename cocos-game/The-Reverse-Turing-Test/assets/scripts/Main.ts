@@ -1,4 +1,4 @@
-import { _decorator, Component, Director, Node, Prefab, director } from 'cc';
+import { _decorator, Component, Director, Node, Prefab, director, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 import { GameManager } from './core/GameManager';
 import { SocketClient } from './network/SocketClient';
 import { BattleSystem } from './game/BattleSystem';
@@ -40,11 +40,11 @@ export class Main extends Component {
     async start() {
         try {
             this.installRuntimeErrorHooks();
-            console.log('[Main] Game starting...');
+            ccLog('[Main] Game starting...');
 
             // 1. 初始化平台适配器
             const platform = getPlatformAdapter();
-            console.log(`[Main] Platform: ${platform.getPlatformName()}`);
+            ccLog(`[Main] Platform: ${platform.getPlatformName()}`);
 
             // 2. 确保管理器组件已挂载
             this.ensureManagers();
@@ -52,7 +52,7 @@ export class Main extends Component {
             // 3. 获取/生成 Session ID
             const sessionId = await getSessionId();
             GameManager.instance.setPlayerId(sessionId);
-            console.log(`[Main] Session ID: ${sessionId}`);
+            ccLog(`[Main] Session ID: ${sessionId}`);
 
             // 4. 绑定全局事件
             this.bindGlobalEvents();
@@ -62,13 +62,13 @@ export class Main extends Component {
             if (ONLINE_FEATURES.ENABLED && (this.testRoomCode || this.testThemeId)) {
                 await this.autoConnect();
             } else if (!ONLINE_FEATURES.ENABLED) {
-                console.log('[Main] ONLINE_FEATURES.ENABLED=false，跳过自动联网');
+                ccLog('[Main] ONLINE_FEATURES.ENABLED=false，跳过自动联网');
             }
 
-            console.log('[Main] Game initialized');
+            ccLog('[Main] Game initialized');
         } catch (error) {
             // 避免启动阶段未捕获异常导致小游戏进程直接退出
-            console.error('[Main] Startup failed:', error);
+            ccError('[Main] Startup failed:', error);
             GameManager.instance?.showToast(ToastType.ERROR, '启动失败，请重试');
         }
     }
@@ -82,22 +82,22 @@ export class Main extends Component {
 
         if (typeof globalObj.addEventListener === 'function') {
             globalObj.addEventListener('error', (event: any) => {
-                console.error('[Runtime] uncaught error:', event?.error || event?.message || event);
+                ccError('[Runtime] uncaught error:', event?.error || event?.message || event);
             });
             globalObj.addEventListener('unhandledrejection', (event: any) => {
-                console.error('[Runtime] unhandled rejection:', event?.reason || event);
+                ccError('[Runtime] unhandled rejection:', event?.reason || event);
             });
         }
 
         const wx = globalObj.wx;
         if (wx && typeof wx.onError === 'function') {
             wx.onError((err: any) => {
-                console.error('[Runtime][wx.onError]:', err);
+                ccError('[Runtime][wx.onError]:', err);
             });
         }
         if (wx && typeof wx.onUnhandledRejection === 'function') {
             wx.onUnhandledRejection((err: any) => {
-                console.error('[Runtime][wx.onUnhandledRejection]:', err);
+                ccError('[Runtime][wx.onUnhandledRejection]:', err);
             });
         }
     }
@@ -169,7 +169,7 @@ export class Main extends Component {
         if (container) {
             spawner.fishSwimContainer = container;
         } else {
-            console.warn('[Main] Swim container not found, PresetFishSwimSpawner will retry/fallback.');
+            ccWarn('[Main] Swim container not found, PresetFishSwimSpawner will retry/fallback.');
         }
     }
 
@@ -207,10 +207,10 @@ export class Main extends Component {
 
             // 如果没有房间代码，通过主题创建/获取房间
             if (!roomCode && this.testThemeId) {
-                console.log(`[Main] Getting room for theme: ${this.testThemeId}`);
+                ccLog(`[Main] Getting room for theme: ${this.testThemeId}`);
                 const room = await APIService.getOrCreateRoom(this.testThemeId);
                 roomCode = room.roomCode;
-                console.log(`[Main] Got room: ${roomCode}`);
+                ccLog(`[Main] Got room: ${roomCode}`);
             }
 
             if (roomCode) {
@@ -218,7 +218,7 @@ export class Main extends Component {
                 await SocketClient.instance.connect(roomCode);
             }
         } catch (error) {
-            console.error('[Main] Auto connect failed:', error);
+            ccError('[Main] Auto connect failed:', error);
             GameManager.instance.showToast(ToastType.ERROR, '连接失败，请重试');
         }
     }
@@ -237,7 +237,7 @@ export class Main extends Component {
             await SocketClient.instance.connect(roomCode);
             return true;
         } catch (error) {
-            console.error('[Main] Join room failed:', error);
+            ccError('[Main] Join room failed:', error);
             GameManager.instance.showToast(ToastType.ERROR, '加入房间失败');
             return false;
         }
@@ -256,7 +256,7 @@ export class Main extends Component {
             const room = await APIService.getOrCreateRoom(themeId);
             return await this.joinRoom(room.roomCode);
         } catch (error) {
-            console.error('[Main] Join by theme failed:', error);
+            ccError('[Main] Join by theme failed:', error);
             GameManager.instance.showToast(ToastType.ERROR, '创建房间失败');
             return false;
         }
@@ -265,7 +265,7 @@ export class Main extends Component {
     // ==================== 事件处理 ====================
 
     private onPhaseChanged(newPhase: GamePhase, oldPhase: GamePhase): void {
-        console.log(`[Main] Phase changed: ${oldPhase} -> ${newPhase}`);
+        ccLog(`[Main] Phase changed: ${oldPhase} -> ${newPhase}`);
 
         // 根据阶段切换 UI
         switch (newPhase) {
@@ -282,12 +282,12 @@ export class Main extends Component {
     }
 
     private onSynced(): void {
-        console.log('[Main] State synced');
+        ccLog('[Main] State synced');
         GameManager.instance.showToast(ToastType.SUCCESS, '已连接到游戏');
     }
 
     private onGameResult(result: any): void {
-        console.log('[Main] Game result:', result);
+        ccLog('[Main] Game result:', result);
 
         if (result.isVictory) {
             GameManager.instance.showToast(ToastType.SUCCESS, '胜利！所有 AI 已被消灭！');
@@ -297,7 +297,7 @@ export class Main extends Component {
     }
 
     private onFishClicked(item: any): void {
-        console.log('[Main] Fish clicked:', item.name);
+        ccLog('[Main] Fish clicked:', item.name);
 
         // 执行战斗操作
         if (BattleSystem.instance) {

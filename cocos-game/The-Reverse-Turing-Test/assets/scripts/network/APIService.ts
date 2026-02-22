@@ -5,7 +5,7 @@
  * 负责与后端 REST API 通信
  */
 
-import { sys } from 'cc';
+import { sys, warn as ccWarn, error as ccError } from 'cc';
 import { ENV_CONFIG, NETWORK_CONFIG, ONLINE_FEATURES } from '../data/GameConstants';
 import { ThemeConfig } from '../data/GameTypes';
 import { DataConverter } from './DataConverter';
@@ -106,7 +106,7 @@ export class APIService {
             return await response.json();
         } catch (error) {
             clearTimeout(timeoutId);
-            console.error(`[APIService] Request failed: ${method} ${path}`, error);
+            ccError(`[APIService] Request failed: ${method} ${path}`, error);
             throw error;
         }
     }
@@ -272,7 +272,7 @@ export class APIService {
 
         // 如果没有配置 API Key，跳过审核
         if (!apiKey) {
-            console.warn('[APIService] Vision API key not configured, skipping review');
+            ccWarn('[APIService] Vision API key not configured, skipping review');
             return { isAppropriate: true };
         }
 
@@ -318,7 +318,7 @@ export class APIService {
                 reason: isAppropriate ? undefined : content
             };
         } catch (error) {
-            console.error('[APIService] Image review failed:', error);
+            ccError('[APIService] Image review failed:', error);
             // 审核失败时默认通过，避免阻塞用户
             return { isAppropriate: true };
         }

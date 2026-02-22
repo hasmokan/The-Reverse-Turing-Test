@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, SpriteFrame, Vec3 } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, SpriteFrame, Vec3, log as ccLog, warn as ccWarn } from 'cc';
 import { CustomFish } from './CustomFish';
 const { ccclass, property } = _decorator;
 
@@ -39,7 +39,7 @@ export class FishSpawner extends Component {
      * 处理绘画完成事件
      */
     private onDrawingCompleted(spriteFrame: SpriteFrame) {
-        console.log('收到绘画完成事件，准备生成鱼');
+        ccLog('收到绘画完成事件，准备生成鱼');
         this.spawnCustomFish(spriteFrame);
     }
 
@@ -49,7 +49,7 @@ export class FishSpawner extends Component {
     public spawnCustomFish(spriteFrame: SpriteFrame) {
         // 检查鱼的数量限制
         if (this.fishList.length >= this.maxFishCount) {
-            console.warn(`已达到最大鱼数量限制 (${this.maxFishCount})`);
+            ccWarn(`已达到最大鱼数量限制 (${this.maxFishCount})`);
             // 移除最老的鱼
             const oldestFish = this.fishList.shift();
             if (oldestFish) {
@@ -92,7 +92,7 @@ export class FishSpawner extends Component {
         // 添加到鱼列表
         this.fishList.push(fishNode);
 
-        console.log(`成功生成自定义鱼，当前鱼数量: ${this.fishList.length}`);
+        ccLog(`成功生成自定义鱼，当前鱼数量: ${this.fishList.length}`);
     }
 
     /**

@@ -1,4 +1,4 @@
-import { _decorator, Component, Camera, view, find, Canvas } from 'cc';
+import { _decorator, Component, Camera, view, find, Canvas, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 import { applyCanvasScaleMode } from './ScreenAdaptationPolicy';
 const { ccclass, property } = _decorator;
 
@@ -29,7 +29,7 @@ export class CameraAdapter extends Component {
     onLoad() {
         this._camera = this.getComponent(Camera)!;
         if (!this._camera) {
-            console.error('[CameraAdapter] Camera component not found!');
+            ccError('[CameraAdapter] Camera component not found!');
             return;
         }
     }
@@ -66,7 +66,7 @@ export class CameraAdapter extends Component {
         // 摄像头位置居中（相对于 Canvas 中心）
         this.node.setPosition(0, 0, 1000);
 
-        console.log(`[CameraAdapter] 摄像头适配完成:
+        ccLog(`[CameraAdapter] 摄像头适配完成:
             可见区域: ${visibleSize.width} x ${visibleSize.height}
             设计分辨率: ${designSize.width} x ${designSize.height}
             Ortho Height: ${orthoHeight}
@@ -77,12 +77,12 @@ export class CameraAdapter extends Component {
         const canvasNode = find('Canvas');
         const canvas = canvasNode?.getComponent(Canvas);
         if (!canvas) {
-            console.warn('[CameraAdapter] Canvas not found, skip canvas policy');
+            ccWarn('[CameraAdapter] Canvas not found, skip canvas policy');
             return;
         }
 
         const result = applyCanvasScaleMode(canvas, this.standardRatio, this.preferFitWidth);
-        console.log(`[CameraAdapter] Canvas policy applied: fitWidth=${result.fitWidth}, fitHeight=${result.fitHeight}, ratio=${result.currentRatio.toFixed(3)}`);
+        ccLog(`[CameraAdapter] Canvas policy applied: fitWidth=${result.fitWidth}, fitHeight=${result.fitHeight}, ratio=${result.currentRatio.toFixed(3)}`);
     }
 
     private onCanvasResize() {
