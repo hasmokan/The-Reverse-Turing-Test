@@ -225,19 +225,31 @@ export class PresetFishSwimSpawner extends Component {
         return null;
     }
 
-    private loadSpriteFrameFromDataUrl(dataUrl: string): Promise<SpriteFrame | null> {
+    private loadSpriteFrameFromDataUrl(imageSource: string): Promise<SpriteFrame | null> {
+        if (this.isDataUrl(imageSource)) {
+            return new Promise((resolve) => {
+                this.loadWithImageFactory(imageSource).then((spriteFrame) => {
+                    if (spriteFrame) {
+                        resolve(spriteFrame);
+                        return;
+                    }
+                    void this.loadWithAssetManager(imageSource).then(resolve);
+                });
+            });
+        }
+
         return new Promise((resolve) => {
-            this.loadWithImageFactory(dataUrl).then((spriteFrame) => {
+            this.loadWithAssetManager(imageSource).then((spriteFrame) => {
                 if (spriteFrame) {
                     resolve(spriteFrame);
                     return;
                 }
-                void this.loadWithAssetManager(dataUrl).then(resolve);
+                void this.loadWithImageFactory(imageSource).then(resolve);
             });
         });
     }
 
-    private loadWithImageFactory(dataUrl: string): Promise<SpriteFrame | null> {
+    private loadWithImageFactory(imageSource: string): Promise<SpriteFrame | null> {
         const globalObj = globalThis as any;
         const imageFactory = this.getImageFactory(globalObj);
         if (!imageFactory) {
@@ -246,6 +258,10 @@ export class PresetFishSwimSpawner extends Component {
 
         return new Promise((resolve) => {
             const image = imageFactory();
+            if (!this.isDataUrl(imageSource) && 'crossOrigin' in image) {
+                // WebGL requires CORS-safe image sources; otherwise texSubImage2D throws SecurityError.
+                image.crossOrigin = 'anonymous';
+            }
             let settled = false;
             const timeout = setTimeout(() => {
                 if (settled) {
@@ -283,11 +299,11 @@ export class PresetFishSwimSpawner extends Component {
                 resolve(null);
             };
 
-            image.src = dataUrl;
+            image.src = imageSource;
         });
     }
 
-    private loadWithAssetManager(dataUrl: string): Promise<SpriteFrame | null> {
+    private loadWithAssetManager(imageSource: string): Promise<SpriteFrame | null> {
         return new Promise((resolve) => {
             let settled = false;
             const timeout = setTimeout(() => {
@@ -298,14 +314,14 @@ export class PresetFishSwimSpawner extends Component {
                 resolve(null);
             }, 5000);
 
-            assetManager.loadRemote<ImageAsset>(dataUrl, (err, imageAsset) => {
+            assetManager.loadRemote<ImageAsset>(imageSource, (err, imageAsset) => {
                 if (settled) {
                     return;
                 }
                 settled = true;
                 clearTimeout(timeout);
                 if (err || !imageAsset) {
-                    console.error('[PresetFishSwimSpawner] Load base64 image failed:', err);
+                    console.error('[PresetFishSwimSpawner] Load image failed:', err);
                     resolve(null);
                     return;
                 }
@@ -313,6 +329,10 @@ export class PresetFishSwimSpawner extends Component {
                 resolve(this.createSpriteFrame(imageAsset));
             });
         });
+    }
+
+    private isDataUrl(value: string): boolean {
+        return value.startsWith('data:');
     }
 
     private getImageFactory(globalObj: any): (() => any) | null {

@@ -25,6 +25,8 @@ test('PresetFishSwimSpawner is background-only and does not use GameManager item
   assert.match(source, /createFallbackSwimContainer/);
   assert.match(source, /director\.getScene\(\)/);
   assert.match(source, /activeInHierarchy/);
+  assert.match(source, /image\.crossOrigin = 'anonymous'/);
+  assert.match(source, /private isDataUrl/);
 });
 
 test('BackgroundFishSwimmer clamps movement inside container bounds', () => {
