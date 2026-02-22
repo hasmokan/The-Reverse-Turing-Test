@@ -1011,23 +1011,38 @@ export class MultiPlayerController extends Component {
         return arr[Math.floor(Math.random() * arr.length)];
     }
 
+    private safeNodeOff(node: Node | null, eventType: string, handler: (...args: unknown[]) => void): void {
+        if (!node || !node.isValid) {
+            return;
+        }
+
+        try {
+            node.off(eventType, handler, this);
+        } catch (error) {
+            ccWarn(`[MultiPlayerController] 跳过事件解绑: ${eventType}`, error);
+        }
+    }
+
     // ==================== 清理 ====================
 
     onDestroy(): void {
-        if (this.drawingBoardNode) {
-            this.drawingBoardNode.off('drawing-completed', this.onDrawingCompleted, this);
-        }
+        this.safeNodeOff(this.drawingBoardNode, 'drawing-completed', this.onDrawingCompleted);
 
-        this.resolveButtonNode(this.submitButton, 'submitButton')?.off(Button.EventType.CLICK, this.onSubmitFish, this);
-        this.resolveButtonNode(this.startGameButton, 'startGameButton')?.off(Button.EventType.CLICK, this.onStartGame, this);
-        this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton')?.off(Button.EventType.CLICK, this.onDrawMore, this);
-        this.resolveButtonNode(this.backButton, 'backButton')?.off(Button.EventType.CLICK, this.onBack, this);
+        const submitButtonNode = this.resolveButtonNode(this.submitButton, 'submitButton');
+        const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton');
+        const drawMoreButtonNode = this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton');
+        const backButtonNode = this.resolveButtonNode(this.backButton, 'backButton');
+
+        this.safeNodeOff(submitButtonNode, Button.EventType.CLICK, this.onSubmitFish);
+        this.safeNodeOff(startGameButtonNode, Button.EventType.CLICK, this.onStartGame);
+        this.safeNodeOff(drawMoreButtonNode, Button.EventType.CLICK, this.onDrawMore);
+        this.safeNodeOff(backButtonNode, Button.EventType.CLICK, this.onBack);
 
         if (this.drawingPhaseUI) {
             const quickFill = this.drawingPhaseUI.getChildByName('QuickFillButton');
             const skip = this.drawingPhaseUI.getChildByName('SkipMetaButton');
-            quickFill?.off(Button.EventType.CLICK, this.onQuickFillClick, this);
-            skip?.off(Button.EventType.CLICK, this.onSkipMetaClick, this);
+            this.safeNodeOff(quickFill, Button.EventType.CLICK, this.onQuickFillClick);
+            this.safeNodeOff(skip, Button.EventType.CLICK, this.onSkipMetaClick);
         }
 
         this.unschedule(this.refreshLoadingTip);

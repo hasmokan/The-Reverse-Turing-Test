@@ -76,3 +76,11 @@ test("MultiPlayerController startGameButton reference is either unset or points 
   const buttonNode = resolveNodeRef(scene, buttonRef);
   assert.ok(buttonNode, "startGameButton should resolve to a valid cc.Node");
 });
+
+test("MultiPlayerController onDestroy uses safe unbind helper for node events", () => {
+  const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
+
+  assert.match(source, /private safeNodeOff\(/);
+  assert.match(source, /this\.safeNodeOff\(this\.drawingBoardNode,\s*'drawing-completed'/);
+  assert.doesNotMatch(source, /this\.drawingBoardNode\.off\('drawing-completed'/);
+});
