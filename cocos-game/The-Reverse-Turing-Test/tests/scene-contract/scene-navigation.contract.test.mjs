@@ -84,3 +84,11 @@ test("MultiPlayerController onDestroy uses safe unbind helper for node events", 
   assert.match(source, /this\.safeNodeOff\(this\.drawingBoardNode,\s*'drawing-completed'/);
   assert.doesNotMatch(source, /this\.drawingBoardNode\.off\('drawing-completed'/);
 });
+
+test("MultiPlayerController onDestroy guards drawingPhaseUI before querying children", () => {
+  const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
+
+  assert.match(source, /if\s*\(\s*drawingPhaseUiNode\s*&&\s*drawingPhaseUiNode\.isValid\s*\)/);
+  assert.match(source, /drawingPhaseUiNode\.getChildByName\('QuickFillButton'\)/);
+  assert.match(source, /drawingPhaseUiNode\.getChildByName\('SkipMetaButton'\)/);
+});

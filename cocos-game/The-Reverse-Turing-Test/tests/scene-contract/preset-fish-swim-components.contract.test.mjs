@@ -46,6 +46,14 @@ test('GameStage wires preset fish spawner for multiplayer stage startup', () => 
   assert.match(source, /addComponent\(PresetFishSwimSpawner\)/);
 });
 
+test('GameStage can still spawn fish when fishPrefab is not configured', () => {
+  const source = readSource('assets/scripts/game/GameStage.ts');
+
+  assert.match(source, /createFallbackFishNode/);
+  assert.match(source, /if \(!this\.fishPrefab\) \{/);
+  assert.match(source, /fishNode = this\.createFallbackFishNode\(item\)/);
+});
+
 test('Main listens scene launch to ensure preset fish spawner in multiplayer scene', () => {
   const source = readSource('assets/scripts/Main.ts');
 

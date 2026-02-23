@@ -50,6 +50,24 @@ test("CameraAdapter uses shared screen adaptation policy", () => {
   assert.match(source, /applyCanvasScaleMode\(/);
 });
 
+test("CameraAdapter performs deferred startup adaptation pass", () => {
+  const source = fs.readFileSync(
+    path.resolve(PROJECT_ROOT, "assets/scripts/ui/common/CameraAdapter.ts"),
+    "utf8"
+  );
+  assert.match(source, /private runAdaptationPass\(\)/);
+  assert.match(source, /this\.scheduleOnce\(this\.runDeferredAdaptationPass0,\s*0\)/);
+  assert.match(source, /this\.scheduleOnce\(this\.runDeferredAdaptationPass1,\s*0\.2\)/);
+});
+
+test("CameraAdapter derives orthoHeight from visible size", () => {
+  const source = fs.readFileSync(
+    path.resolve(PROJECT_ROOT, "assets/scripts/ui/common/CameraAdapter.ts"),
+    "utf8"
+  );
+  assert.match(source, /const orthoHeight = visibleSize\.height \/ 2/);
+});
+
 test("MainScene has baseline adaptation structure", () => {
   const scene = readScene("assets/scenes/MainScene.scene");
   assertCanvasExists(scene, "MainScene");

@@ -49,10 +49,10 @@ export class DrawingBoard extends Component {
         }
 
         // 绑定触摸事件
-        this.node.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
-        this.node.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
-        this.node.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
-        this.node.on(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        this.drawingCanvas.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
+        this.drawingCanvas.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
+        this.drawingCanvas.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+        this.drawingCanvas.on(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
 
         // 绑定按钮事件
         if (this.clearButton) {
@@ -97,10 +97,12 @@ export class DrawingBoard extends Component {
 
     onDestroy() {
         // 移除事件监听
-        this.node.off(Input.EventType.TOUCH_START, this.onTouchStart, this);
-        this.node.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
-        this.node.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
-        this.node.off(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        if (this.drawingCanvas && this.drawingCanvas.isValid) {
+            this.drawingCanvas.off(Input.EventType.TOUCH_START, this.onTouchStart, this);
+            this.drawingCanvas.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
+            this.drawingCanvas.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+            this.drawingCanvas.off(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        }
 
         if (this.clearButton && this.clearButton.node) {
             this.clearButton.node.off(Button.EventType.CLICK, this.clearCanvas, this);

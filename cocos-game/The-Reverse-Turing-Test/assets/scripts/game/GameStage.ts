@@ -217,8 +217,8 @@ export class GameStage extends Component {
      * 创建鱼节点
      */
     private createFishNode(item: GameItem): void {
-        if (!this.fishPrefab || !this.fishContainer) {
-            ccWarn('[GameStage] fishPrefab or fishContainer not set');
+        if (!this.fishContainer) {
+            ccWarn('[GameStage] fishContainer not set');
             return;
         }
 
@@ -227,16 +227,47 @@ export class GameStage extends Component {
             return;
         }
 
-        const fishNode = instantiate(this.fishPrefab);
-        this.fishContainer.addChild(fishNode);
+        let fishNode: Node;
+        if (!this.fishPrefab) {
+            ccWarn('[GameStage] fishPrefab not set, using fallback fish node');
+            fishNode = this.createFallbackFishNode(item);
+        } else {
+            fishNode = instantiate(this.fishPrefab);
+            this.fishContainer.addChild(fishNode);
+        }
 
         // 初始化控制器
         const controller = fishNode.getComponent(FishController);
         if (controller) {
+            const sprite = fishNode.getComponent(Sprite);
+            if (!controller.fishSprite && sprite) {
+                controller.fishSprite = sprite;
+            }
             controller.init(item);
+        } else {
+            ccWarn(`[GameStage] FishController missing on fish node: ${fishNode.name}`);
         }
 
         this._fishNodes.set(item.id, fishNode);
+    }
+
+    /**
+     * 当场景未配置 fishPrefab 时，动态创建可游动鱼节点，保证投放可见。
+     */
+    private createFallbackFishNode(item: GameItem): Node {
+        const fishNode = new Node(`Fish_${item.id}`);
+        this.fishContainer.addChild(fishNode);
+
+        const transform = fishNode.getComponent(UITransform) || fishNode.addComponent(UITransform);
+        transform.setContentSize(120, 72);
+
+        const sprite = fishNode.getComponent(Sprite) || fishNode.addComponent(Sprite);
+        sprite.color = new Color(255, 255, 255, 255);
+
+        const controller = fishNode.getComponent(FishController) || fishNode.addComponent(FishController);
+        controller.fishSprite = sprite;
+
+        return fishNode;
     }
 
     /**

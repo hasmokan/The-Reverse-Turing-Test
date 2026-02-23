@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { findNodeByName, readScene } from "./sceneJson.mjs";
 
 test("drawing board keeps background under draw canvas", () => {
@@ -27,3 +28,16 @@ test("drawing board keeps background under draw canvas", () => {
   assert.ok(drawCanvasComponentTypes.includes("cc.Graphics"), "DrawCanvas must include cc.Graphics");
 });
 
+test("drawing board listens touch events on drawingCanvas instead of 1x1 host node", () => {
+  const source = readFileSync(new URL("../../assets/scripts/ui/multiplayer/DrawingBoard.ts", import.meta.url), "utf8");
+
+  assert.match(source, /this\.drawingCanvas\.on\(Input\.EventType\.TOUCH_START/);
+  assert.match(source, /this\.drawingCanvas\.on\(Input\.EventType\.TOUCH_MOVE/);
+  assert.match(source, /this\.drawingCanvas\.on\(Input\.EventType\.TOUCH_END/);
+  assert.match(source, /this\.drawingCanvas\.on\(Input\.EventType\.TOUCH_CANCEL/);
+
+  assert.doesNotMatch(source, /this\.node\.on\(Input\.EventType\.TOUCH_START/);
+  assert.doesNotMatch(source, /this\.node\.on\(Input\.EventType\.TOUCH_MOVE/);
+  assert.doesNotMatch(source, /this\.node\.on\(Input\.EventType\.TOUCH_END/);
+  assert.doesNotMatch(source, /this\.node\.on\(Input\.EventType\.TOUCH_CANCEL/);
+});

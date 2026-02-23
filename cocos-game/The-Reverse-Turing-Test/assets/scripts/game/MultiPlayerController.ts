@@ -211,12 +211,24 @@ export class MultiPlayerController extends Component {
         return button;
     }
 
-    private resolveButtonNode(target: Node | Button | null, fieldName: string): Node | null {
+    private resolveButtonNode(target: Node | Button | null, fieldName: string, warnOnInvalid: boolean = true): Node | null {
         if (!target) return null;
-        if (target instanceof Node) return target;
-        const componentNode = (target as Button).node;
-        if (componentNode) return componentNode;
-        ccWarn(`[MultiPlayerController] ${fieldName} 不是有效的 Node/Button 引用`);
+        if (target instanceof Node) {
+            if (target.isValid) {
+                return target;
+            }
+            return null;
+        }
+
+        const button = target as Button;
+        const componentNode = button.node;
+        if (button.isValid && componentNode?.isValid) {
+            return componentNode;
+        }
+
+        if (warnOnInvalid && button.isValid) {
+            ccWarn(`[MultiPlayerController] ${fieldName} 不是有效的 Node/Button 引用`);
+        }
         return null;
     }
 
@@ -1028,19 +1040,20 @@ export class MultiPlayerController extends Component {
     onDestroy(): void {
         this.safeNodeOff(this.drawingBoardNode, 'drawing-completed', this.onDrawingCompleted);
 
-        const submitButtonNode = this.resolveButtonNode(this.submitButton, 'submitButton');
-        const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton');
-        const drawMoreButtonNode = this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton');
-        const backButtonNode = this.resolveButtonNode(this.backButton, 'backButton');
+        const submitButtonNode = this.resolveButtonNode(this.submitButton, 'submitButton', false);
+        const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton', false);
+        const drawMoreButtonNode = this.resolveButtonNode(this.drawMoreButton, 'drawMoreButton', false);
+        const backButtonNode = this.resolveButtonNode(this.backButton, 'backButton', false);
 
         this.safeNodeOff(submitButtonNode, Button.EventType.CLICK, this.onSubmitFish);
         this.safeNodeOff(startGameButtonNode, Button.EventType.CLICK, this.onStartGame);
         this.safeNodeOff(drawMoreButtonNode, Button.EventType.CLICK, this.onDrawMore);
         this.safeNodeOff(backButtonNode, Button.EventType.CLICK, this.onBack);
 
-        if (this.drawingPhaseUI) {
-            const quickFill = this.drawingPhaseUI.getChildByName('QuickFillButton');
-            const skip = this.drawingPhaseUI.getChildByName('SkipMetaButton');
+        const drawingPhaseUiNode = this.drawingPhaseUI;
+        if (drawingPhaseUiNode && drawingPhaseUiNode.isValid) {
+            const quickFill = drawingPhaseUiNode.getChildByName('QuickFillButton');
+            const skip = drawingPhaseUiNode.getChildByName('SkipMetaButton');
             this.safeNodeOff(quickFill, Button.EventType.CLICK, this.onQuickFillClick);
             this.safeNodeOff(skip, Button.EventType.CLICK, this.onSkipMetaClick);
         }

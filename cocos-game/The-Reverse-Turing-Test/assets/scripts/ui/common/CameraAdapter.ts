@@ -1,4 +1,4 @@
-import { _decorator, Component, Camera, view, find, Canvas, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
+import { _decorator, Component, Camera, view, find, Canvas, screen, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 import { applyCanvasScaleMode } from './ScreenAdaptationPolicy';
 const { ccclass, property } = _decorator;
 
@@ -24,7 +24,11 @@ export class CameraAdapter extends Component {
     @property({ tooltip: '是否始终宽度优先（当前项目建议开启）' })
     preferFitWidth: boolean = true;
 
+    @property({ tooltip: '输出屏幕适配调试日志（临时）' })
+    verboseAdaptationLog: boolean = true;
+
     private _camera: Camera = null!;
+    private _adaptationPassCount: number = 0;
 
     onLoad() {
         this._camera = this.getComponent(Camera)!;
@@ -32,21 +36,62 @@ export class CameraAdapter extends Component {
             ccError('[CameraAdapter] Camera component not found!');
             return;
         }
+        this.logViewportSnapshot('onLoad');
     }
 
     start() {
-        if (this.autoAdapt) {
-            this.applyCanvasPolicy();
-            this.adaptCamera();
-        }
+        if (!this.autoAdapt) return;
+
+        this.logViewportSnapshot('start-before-pass');
+        this.runAdaptationPass();
+        // 首帧后补两次，避免设备在启动阶段上报尺寸抖动
+        this.scheduleOnce(this.runDeferredAdaptationPass0, 0);
+        this.scheduleOnce(this.runDeferredAdaptationPass1, 0.2);
+        this.scheduleOnce(() => this.logViewportSnapshot('probe-0.5s'), 0.5);
+        this.scheduleOnce(() => this.logViewportSnapshot('probe-1.0s'), 1.0);
     }
 
     onEnable() {
         view.on('canvas-resize', this.onCanvasResize, this);
+        view.on('design-resolution-changed', this.onDesignResolutionChanged, this);
+        this.logViewportSnapshot('onEnable');
     }
 
     onDisable() {
         view.off('canvas-resize', this.onCanvasResize, this);
+        view.off('design-resolution-changed', this.onDesignResolutionChanged, this);
+        this.unschedule(this.runAdaptationPass);
+        this.unschedule(this.runDeferredAdaptationPass0);
+        this.unschedule(this.runDeferredAdaptationPass1);
+    }
+
+    private runAdaptationPass() {
+        this._adaptationPassCount += 1;
+        this.logViewportSnapshot(`runAdaptationPass#${this._adaptationPassCount}-before`);
+        this.applyCanvasPolicy();
+        this.adaptCamera();
+        this.logViewportSnapshot(`runAdaptationPass#${this._adaptationPassCount}-after`);
+    }
+
+    private runDeferredAdaptationPass0() {
+        this.runAdaptationPass();
+    }
+
+    private runDeferredAdaptationPass1() {
+        this.runAdaptationPass();
+    }
+
+    private logViewportSnapshot(reason: string) {
+        if (!this.verboseAdaptationLog) return;
+
+        const frame = screen.windowSize;
+        const visible = view.getVisibleSize();
+        const design = view.getDesignResolutionSize();
+        ccLog(
+            `[CameraAdapter] ${reason} frame=${frame.width}x${frame.height} ` +
+            `visible=${visible.width}x${visible.height} design=${design.width}x${design.height} ` +
+            `cameraOrtho=${this._camera?.orthoHeight ?? -1}`
+        );
     }
 
     /**
@@ -58,8 +103,8 @@ export class CameraAdapter extends Component {
         const visibleSize = view.getVisibleSize();
         const designSize = view.getDesignResolutionSize();
 
-        // 正交相机高度跟随设计分辨率高度变化
-        const orthoHeight = designSize.height / 2;
+        // UI 正交相机应跟随当前可见高度，避免超高屏首帧看起来“未适配/被放大”
+        const orthoHeight = visibleSize.height / 2;
 
         this._camera.orthoHeight = orthoHeight;
 
@@ -87,8 +132,14 @@ export class CameraAdapter extends Component {
 
     private onCanvasResize() {
         if (this.autoAdapt) {
-            this.applyCanvasPolicy();
-            this.adaptCamera();
+            this.logViewportSnapshot('event:canvas-resize');
+            this.runAdaptationPass();
+        }
+    }
+
+    private onDesignResolutionChanged() {
+        if (this.autoAdapt) {
+            this.logViewportSnapshot('event:design-resolution-changed');
         }
     }
 }

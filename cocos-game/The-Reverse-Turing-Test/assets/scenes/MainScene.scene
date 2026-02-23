@@ -248,7 +248,7 @@
     "node": {
       "__id__": 3
     },
-    "_enabled": true,
+    "_enabled": false,
     "__prefab": null,
     "designWidth": 750,
     "designHeight": 1334,
@@ -273,6 +273,9 @@
       },
       {
         "__id__": 9
+      },
+      {
+        "__id__": 103
       }
     ],
     "_prefab": null,
@@ -3382,5 +3385,26 @@
   {
     "__type__": "cc.PostSettingsInfo",
     "_toneMappingType": 0
+  },
+  {
+    "__type__": "cbd77qN3NlLbri+ap5jk3Lw",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 7
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "remoteUrl": "",
+    "backgroundImage": {
+      "__uuid__": "d1405970-cbdb-46d5-b1e1-fff1578057de@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "autoFitScreen": true,
+    "fitMode": 3,
+    "designWidth": 750,
+    "designHeight": 1334,
+    "_id": "BgMgrMainSceneAutoAdded000000001"
   }
 ]
