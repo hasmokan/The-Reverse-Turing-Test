@@ -822,20 +822,6 @@ export class MultiPlayerController extends Component {
         if (drawMoreButton) {
             drawMoreButton.interactable = available;
         }
-
-        const label = drawMoreButtonNode.getChildByName('Label')?.getComponent(Label);
-        if (label) {
-            label.string = available
-                ? `画一条鱼 (${activeCount}/${MAX_ACTIVE_FISH})`
-                : `鱼缸太挤了 (${activeCount}/${MAX_ACTIVE_FISH})`;
-            label.color = available ? Color.WHITE : new Color(230, 230, 230, 255);
-        }
-
-        const bg = drawMoreButtonNode.getComponent(Sprite);
-        if (bg) {
-            bg.color = available ? new Color(100, 180, 255, 255) : new Color(130, 130, 130, 255);
-        }
-
         this.updateDrawPanelToggleState();
     }
 
