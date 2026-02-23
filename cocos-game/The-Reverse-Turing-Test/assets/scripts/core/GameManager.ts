@@ -1,4 +1,4 @@
-import { _decorator, Component, Director, EventTarget, Node, SpriteFrame, director, game } from 'cc';
+import { _decorator, Component, Director, EventTarget, Node, SpriteFrame, director, game, log as ccLog, warn as ccWarn } from 'cc';
 import {
     GamePhase, GameItem, ThemeConfig, BulletState,
     FishVoteInfo, GameResult, EliminationData,
@@ -6,6 +6,8 @@ import {
 } from '../data/GameTypes';
 import { BATTLE_CONSTANTS, PHYSICS_CONFIG } from '../data/GameConstants';
 import { PresetFishSwimSpawner } from '../game/PresetFishSwimSpawner';
+import { ResourceLoader } from './ResourceLoader';
+import { ResourceConfig } from './ResourceConfig';
 
 const { ccclass, property } = _decorator;
 
@@ -104,6 +106,7 @@ export class GameManager extends Component {
 
     private _floatingDamages: FloatingDamage[] = [];
     private _damageIdCounter: number = 0;
+    private _remoteUiSyncInProgress: boolean = false;
 
     // ==================== 生命周期 ====================
 
@@ -116,6 +119,7 @@ export class GameManager extends Component {
 
         // 保持跨场景不销毁
         game.addPersistRootNode(this.node);
+        this.ensureResourceLoader();
 
         // 启动 CD 检查定时器
         this.schedule(this.checkCooldown, 0.1);
@@ -554,6 +558,8 @@ export class GameManager extends Component {
     }
 
     private onAfterSceneLaunch(): void {
+        void this.syncRemoteUiForCurrentScene();
+
         const scene = director.getScene();
         if (!scene || scene.name !== 'MultiPlayerScene') {
             return;
@@ -577,6 +583,69 @@ export class GameManager extends Component {
         ]);
         if (swimContainer) {
             spawner.fishSwimContainer = swimContainer;
+        }
+    }
+
+    private ensureResourceLoader(): ResourceLoader | null {
+        const singleton = ResourceLoader.instance;
+        if (singleton && singleton.isValid) {
+            return singleton;
+        }
+
+        let loader = this.getComponent(ResourceLoader);
+        if (loader && loader.isValid) {
+            return loader;
+        }
+
+        try {
+            loader = this.addComponent(ResourceLoader);
+            return loader;
+        } catch (error) {
+            ccWarn('[GameManager] 挂载 ResourceLoader 失败:', error);
+            return null;
+        }
+    }
+
+    private async syncRemoteUiForCurrentScene(): Promise<void> {
+        if (this._remoteUiSyncInProgress) {
+            return;
+        }
+
+        const scene = director.getScene();
+        if (!scene) {
+            return;
+        }
+
+        const loader = this.ensureResourceLoader();
+        if (!loader) {
+            return;
+        }
+
+        this._remoteUiSyncInProgress = true;
+        try {
+            const missingKeys = ResourceConfig
+                .getPreloadResources()
+                .map((resource) => resource.key)
+                .filter((key) => !loader.isLoaded(key));
+
+            if (missingKeys.length > 0) {
+                const result = await loader.preloadResources();
+                if (!result.success) {
+                    ccWarn('[GameManager] 远程 UI 预加载存在失败项:', result.errors);
+                }
+            }
+
+            const activeScene = director.getScene();
+            if (!activeScene || !activeScene.isValid) {
+                return;
+            }
+            const canvas = this.findNodeByName(activeScene, 'Canvas') || activeScene;
+            const { applied, total } = loader.applyMappedSpriteFrames(canvas);
+            ccLog(`[GameManager] 场景远程 UI 映射已应用: ${applied}/${total} (${activeScene.name})`);
+        } catch (error) {
+            ccWarn('[GameManager] 同步远程 UI 映射失败:', error);
+        } finally {
+            this._remoteUiSyncInProgress = false;
         }
     }
 

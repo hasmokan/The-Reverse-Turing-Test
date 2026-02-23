@@ -1,4 +1,4 @@
-import { _decorator, Component, assetManager, ImageAsset, SpriteFrame, Texture2D, AssetManager, error, log, sys } from 'cc';
+import { _decorator, Component, assetManager, ImageAsset, SpriteFrame, Texture2D, AssetManager, Node, Sprite, Color, error, log, warn, sys } from 'cc';
 import { ResourceConfig, RemoteResource } from './ResourceConfig';
 
 const { ccclass } = _decorator;
@@ -58,6 +58,11 @@ export class ResourceLoader extends Component {
     }
 
     onLoad() {
+        if (ResourceLoader._instance && ResourceLoader._instance !== this) {
+            warn('[ResourceLoader] 检测到重复实例，已销毁当前组件');
+            this.destroy();
+            return;
+        }
         ResourceLoader._instance = this;
         const env = ResourceLoader._isWeChatMiniGame() ? '微信小游戏' : '浏览器';
         log(`[ResourceLoader] 资源加载器已初始化 (${env}环境)`);
@@ -334,6 +339,48 @@ export class ResourceLoader extends Component {
     }
 
     /**
+     * 按 ResourceConfig.NODE_MAPPING 将已加载资源应用到指定节点树
+     */
+    public applyMappedSpriteFrames(root: Node): { applied: number; total: number } {
+        if (!root?.isValid) {
+            return { applied: 0, total: Object.keys(ResourceConfig.NODE_MAPPING).length };
+        }
+
+        const mapping = ResourceConfig.NODE_MAPPING;
+        let applied = 0;
+
+        for (const [key, nodeName] of Object.entries(mapping)) {
+            const spriteFrame = this.getSpriteFrame(key);
+            if (!spriteFrame) {
+                continue;
+            }
+
+            const targetNode = this.findNodeByName(root, nodeName);
+            if (!targetNode) {
+                continue;
+            }
+
+            const sprite = targetNode.getComponent(Sprite);
+            if (!sprite) {
+                continue;
+            }
+
+            const backgroundManager = targetNode.getComponent('BackgroundManager') as { changeBackground?: (frame: SpriteFrame) => void } | null;
+            if (backgroundManager?.changeBackground) {
+                backgroundManager.changeBackground(spriteFrame);
+            } else {
+                sprite.spriteFrame = spriteFrame;
+            }
+
+            sprite.color = Color.WHITE;
+            applied++;
+        }
+
+        log(`[ResourceLoader] 映射应用完成: ${applied}/${Object.keys(mapping).length}`);
+        return { applied, total: Object.keys(mapping).length };
+    }
+
+    /**
      * 清除所有缓存
      */
     public clearCache(): void {
@@ -350,7 +397,25 @@ export class ResourceLoader extends Component {
         log(`[ResourceLoader] 已清除缓存: ${key}`);
     }
 
+    private findNodeByName(root: Node, name: string): Node | null {
+        if (root.name === name) {
+            return root;
+        }
+
+        for (const child of root.children) {
+            const found = this.findNodeByName(child, name);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     onDestroy() {
+        if (ResourceLoader._instance !== this) {
+            return;
+        }
         this.clearCache();
         this._bundle = null;
         ResourceLoader._instance = null!;

@@ -34,12 +34,12 @@ test("BackgroundManager defaults to width-priority mode", () => {
   assert.match(source, /fitMode:\s*FitMode\s*=\s*FitMode\.WIDTH_PRIORITY_STRETCH_HEIGHT/);
 });
 
-test("GameBootstrap applies remote background via BackgroundManager when available", () => {
+test("ResourceLoader applies remote background via BackgroundManager when available", () => {
   const source = fs.readFileSync(
-    path.resolve(PROJECT_ROOT, "assets/scripts/core/GameBootstrap.ts"),
+    path.resolve(PROJECT_ROOT, "assets/scripts/core/ResourceLoader.ts"),
     "utf8"
   );
 
-  assert.match(source, /getComponent\(BackgroundManager\)/);
+  assert.match(source, /getComponent\('BackgroundManager'\)/);
   assert.match(source, /changeBackground\(spriteFrame\)/);
 });

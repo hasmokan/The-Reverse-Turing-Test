@@ -1,8 +1,6 @@
-import { _decorator, Component, Node, Sprite, director, Color, find, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
+import { _decorator, Component, Node, Sprite, find, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 import { ResourceLoader } from './ResourceLoader';
 import { LoadingScreen } from '../ui/common/LoadingScreen';
-import { ResourceConfig } from './ResourceConfig';
-import { BackgroundManager } from '../ui/common/BackgroundManager';
 
 const { ccclass, property } = _decorator;
 
@@ -62,15 +60,20 @@ export class GameBootstrap extends Component {
      * 预加载资源
      */
     private async preloadResources(): Promise<void> {
-        if (!this.resourceLoader) {
+        const loader = (this.resourceLoader && this.resourceLoader.isValid)
+            ? this.resourceLoader
+            : ResourceLoader.instance;
+
+        if (!loader) {
             ccError('[GameBootstrap] ResourceLoader 未找到');
             return;
         }
+        this.resourceLoader = loader;
 
         ccLog('[GameBootstrap] 开始预加载资源...');
 
         try {
-            const result = await this.resourceLoader.preloadResources(
+            const result = await loader.preloadResources(
                 undefined, // 主包资源
                 (loaded, total, currentItem) => {
                     // 更新进度条
@@ -102,7 +105,10 @@ export class GameBootstrap extends Component {
      * 应用所有远程图片到对应的场景节点
      */
     private applyRemoteImages(): void {
-        if (!this.resourceLoader) return;
+        const loader = (this.resourceLoader && this.resourceLoader.isValid)
+            ? this.resourceLoader
+            : ResourceLoader.instance;
+        if (!loader) return;
 
         const canvas = find('Canvas');
         if (!canvas) {
@@ -110,53 +116,8 @@ export class GameBootstrap extends Component {
             return;
         }
 
-        const mapping = ResourceConfig.NODE_MAPPING;
-        let applied = 0;
-
-        for (const [key, nodeName] of Object.entries(mapping)) {
-            const spriteFrame = this.resourceLoader.getSpriteFrame(key);
-            if (!spriteFrame) {
-                ccWarn(`[GameBootstrap] 未找到远程资源: ${key}`);
-                continue;
-            }
-
-            const targetNode = this.findNodeByName(canvas, nodeName);
-            if (!targetNode) {
-                ccWarn(`[GameBootstrap] 未找到节点: ${nodeName}`);
-                continue;
-            }
-
-            const sprite = targetNode.getComponent(Sprite);
-            if (!sprite) {
-                ccWarn(`[GameBootstrap] 节点 ${nodeName} 没有 Sprite 组件`);
-                continue;
-            }
-
-            // 节点挂了 BackgroundManager 时，统一走 changeBackground 触发重适配。
-            const backgroundManager = targetNode.getComponent(BackgroundManager);
-            if (backgroundManager) {
-                backgroundManager.changeBackground(spriteFrame);
-            } else {
-                sprite.spriteFrame = spriteFrame;
-            }
-
-            sprite.color = new Color(255, 255, 255, 255);
-            applied++;
-        }
-
-        ccLog(`[GameBootstrap] 已应用 ${applied}/${Object.keys(mapping).length} 个远程图片`);
-    }
-
-    /**
-     * 递归查找子节点
-     */
-    private findNodeByName(root: Node, name: string): Node | null {
-        for (const child of root.children) {
-            if (child.name === name) return child;
-            const found = this.findNodeByName(child, name);
-            if (found) return found;
-        }
-        return null;
+        const { applied, total } = loader.applyMappedSpriteFrames(canvas);
+        ccLog(`[GameBootstrap] 已应用 ${applied}/${total} 个远程图片`);
     }
 
     /**
