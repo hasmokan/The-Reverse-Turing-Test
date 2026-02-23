@@ -37,6 +37,9 @@ export class ResourceConfig {
         'icon_brain': '肉色大脑图标',
         'icon_bulb': '黄色灯泡图标',
         'draw_a_fish': 'draw_a_fish',
+        'draw_mode_button': 'DrawModeButton',
+        'eraser_mode_button': 'EraserModeButton',
+        'submit_button': 'SubmitButton',
     };
 
     /**
@@ -133,6 +136,27 @@ export class ResourceConfig {
             key: "draw_a_fish",
             bundlePath: "draw_a_fish/spriteFrame",
             remoteUrl: `${ResourceConfig.COS_BASE_URL}/%E7%94%BB%E4%B8%80%E6%9D%A1%E9%B1%BC%E6%8C%89%E9%92%AE.png`,
+            type: 'image',
+            preload: true
+        },
+        {
+            key: "draw_mode_button",
+            bundlePath: "draw_mode_button/spriteFrame",
+            remoteUrl: `${ResourceConfig.COS_BASE_URL}/draw.png?imageSlim`,
+            type: 'image',
+            preload: true
+        },
+        {
+            key: "eraser_mode_button",
+            bundlePath: "eraser_mode_button/spriteFrame",
+            remoteUrl: `${ResourceConfig.COS_BASE_URL}/eraser.png?imageSlim`,
+            type: 'image',
+            preload: true
+        },
+        {
+            key: "submit_button",
+            bundlePath: "submit_button/spriteFrame",
+            remoteUrl: `${ResourceConfig.COS_BASE_URL}/save.png?imageSlim`,
             type: 'image',
             preload: true
         }

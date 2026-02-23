@@ -92,3 +92,29 @@ test("MultiPlayerController onDestroy guards drawingPhaseUI before querying chil
   assert.match(source, /drawingPhaseUiNode\.getChildByName\('QuickFillButton'\)/);
   assert.match(source, /drawingPhaseUiNode\.getChildByName\('SkipMetaButton'\)/);
 });
+
+test("MultiPlayerController dedupes drawing commits by commit token", () => {
+  const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
+
+  assert.match(source, /private _processedDrawingCommitTokens: Set<string> = new Set\(\)/);
+  assert.match(source, /onDrawingCompleted\(spriteFrame: SpriteFrame,\s*commitToken\?: string\)/);
+  assert.match(source, /this\._processedDrawingCommitTokens\.has\(commitToken\)/);
+  assert.match(source, /this\._processedDrawingCommitTokens\.add\(commitToken\)/);
+});
+
+test("MultiPlayerController save failure path keeps state and shows toast", () => {
+  const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
+
+  assert.match(source, /if\s*\(!spriteFrame\s*\|\|\s*!spriteFrame\.texture\)/);
+  assert.match(source, /gm\.showToast\(ToastType\.ERROR,\s*'保存失败，请重试'\)/);
+  assert.match(source, /catch\s*\(error\)\s*\{/);
+  assert.match(source, /gm\.showToast\(ToastType\.ERROR,\s*'保存失败，请稍后重试'\)/);
+});
+
+test("MultiPlayerController draw panel toggle also manages draw tool buttons", () => {
+  const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
+
+  assert.match(source, /const drawingBoardComp = this\.drawingBoardNode\?\.getComponent\('DrawingBoard'\) as any/);
+  assert.match(source, /pushUniqueNode\(drawingBoardComp\?\.drawModeButton\?\.node\)/);
+  assert.match(source, /pushUniqueNode\(drawingBoardComp\?\.eraserModeButton\?\.node\)/);
+});

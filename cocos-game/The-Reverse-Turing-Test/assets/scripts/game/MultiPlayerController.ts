@@ -118,6 +118,7 @@ export class MultiPlayerController extends Component {
     private _isDrawingFromGamePhase: boolean = false;
     private _drawPanelNodes: Node[] = [];
     private _isDrawPanelVisible: boolean = true;
+    private _processedDrawingCommitTokens: Set<string> = new Set();
 
     private _aiSpawner: AISpawner | null = null;
     private _killFeedManager: KillFeedManager | null = null;
@@ -164,6 +165,7 @@ export class MultiPlayerController extends Component {
         }
 
         gm.resetGame();
+        this._processedDrawingCommitTokens.clear();
         gm.setPlayerId('local-player');
         gm.setEliminationThreshold(BATTLE_CONSTANTS.ELIMINATION_THRESHOLD);
         gm.setPhase(GamePhase.DRAWING);
@@ -315,19 +317,31 @@ export class MultiPlayerController extends Component {
 
     private cacheDrawPanelNodes(): void {
         const nodes: Node[] = [];
-        if (this.drawingBoardNode) nodes.push(this.drawingBoardNode);
-        if (this.nameInputNode) nodes.push(this.nameInputNode);
-        if (this.descInputNode) nodes.push(this.descInputNode);
+        const pushUniqueNode = (node: Node | null | undefined) => {
+            if (!node || !node.isValid) return;
+            if (!nodes.includes(node)) {
+                nodes.push(node);
+            }
+        };
+
+        pushUniqueNode(this.drawingBoardNode);
+        pushUniqueNode(this.nameInputNode);
+        pushUniqueNode(this.descInputNode);
         const submitButtonNode = this.resolveButtonNode(this.submitButton, 'submitButton');
         const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton');
-        if (submitButtonNode) nodes.push(submitButtonNode);
-        if (startGameButtonNode) nodes.push(startGameButtonNode);
+        pushUniqueNode(submitButtonNode);
+        pushUniqueNode(startGameButtonNode);
+
+        const drawingBoardComp = this.drawingBoardNode?.getComponent('DrawingBoard') as any;
+        pushUniqueNode(drawingBoardComp?.drawModeButton?.node);
+        pushUniqueNode(drawingBoardComp?.eraserModeButton?.node);
+        (drawingBoardComp?.colorButtons ?? []).forEach((btn: any) => pushUniqueNode(btn?.node));
 
         if (this.drawingPhaseUI) {
             const quickFill = this.drawingPhaseUI.getChildByName('QuickFillButton');
             const skip = this.drawingPhaseUI.getChildByName('SkipMetaButton');
-            if (quickFill) nodes.push(quickFill);
-            if (skip) nodes.push(skip);
+            pushUniqueNode(quickFill);
+            pushUniqueNode(skip);
         }
 
         this._drawPanelNodes = nodes;
@@ -463,11 +477,31 @@ export class MultiPlayerController extends Component {
 
     // ==================== 画板事件 ====================
 
-    private onDrawingCompleted(spriteFrame: SpriteFrame): void {
+    private onDrawingCompleted(spriteFrame: SpriteFrame, commitToken?: string): void {
         if (this._phase !== MultiPlayerPhase.DRAWING) return;
 
         const gm = GameManager.instance;
         if (!gm) return;
+
+        if (!spriteFrame || !spriteFrame.texture) {
+            gm.showToast(ToastType.ERROR, '保存失败，请重试');
+            return;
+        }
+
+        if (commitToken) {
+            if (this._processedDrawingCommitTokens.has(commitToken)) {
+                ccWarn(`[MultiPlayerController] 忽略重复提交 token=${commitToken}`);
+                return;
+            }
+            this._processedDrawingCommitTokens.add(commitToken);
+            // 仅保留近期 token，避免集合无上限增长
+            if (this._processedDrawingCommitTokens.size > 200) {
+                const oldest = this._processedDrawingCommitTokens.values().next().value as string | undefined;
+                if (oldest) {
+                    this._processedDrawingCommitTokens.delete(oldest);
+                }
+            }
+        }
 
         if (this._ownedFishIds.size >= MAX_ACTIVE_FISH) {
             gm.showToast(ToastType.WARNING, '你的鱼缸太挤了，等死一条再说吧');
@@ -487,15 +521,21 @@ export class MultiPlayerController extends Component {
         if (descLabel) descLabel.string = fishDesc;
 
         const fishId = `player-fish-${Date.now()}`;
-        gm.setLocalFishSpriteFrame(fishId, spriteFrame);
-        gm.addItem({
-            id: fishId,
-            name: fishName,
-            description: fishDesc,
-            imageUrl: `${LOCAL_SPRITE_PREFIX}${fishId}`,
-            author: '玩家',
-            isAI: false,
-        });
+        try {
+            gm.setLocalFishSpriteFrame(fishId, spriteFrame);
+            gm.addItem({
+                id: fishId,
+                name: fishName,
+                description: fishDesc,
+                imageUrl: `${LOCAL_SPRITE_PREFIX}${fishId}`,
+                author: '玩家',
+                isAI: false,
+            });
+        } catch (error) {
+            ccError('[MultiPlayerController] 鱼保存/入池失败:', error);
+            gm.showToast(ToastType.ERROR, '保存失败，请稍后重试');
+            return;
+        }
 
         if (this._ownedFishIds.size === 0) {
             gm.setPlayerFishId(fishId);
