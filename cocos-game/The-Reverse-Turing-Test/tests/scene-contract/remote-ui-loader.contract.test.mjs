@@ -23,3 +23,22 @@ test("GameBootstrap delegates remote image application to ResourceLoader mapping
 
   assert.match(source, /applyMappedSpriteFrames\(canvas\)/);
 });
+
+test("MenuButtonHandler binds clicks only on valid button nodes", () => {
+  const source = readFileSync(new URL("../../assets/scripts/ui/main-menu/MenuButtonHandler.ts", import.meta.url), "utf8");
+
+  assert.match(source, /private resolveButtonNode\(button: Button \| null\): Node \| null/);
+  assert.match(source, /button\.isValid/);
+  assert.match(source, /node && node\.isValid \? node : null/);
+  assert.match(source, /private bindButtonClick\(/);
+});
+
+test("ResourceLoader protects async cache mutations after destroy", () => {
+  const source = readFileSync(new URL("../../assets/scripts/core/ResourceLoader.ts", import.meta.url), "utf8");
+
+  assert.match(source, /private _disposed = false/);
+  assert.match(source, /private ensureRuntimeState\(\): boolean/);
+  assert.match(source, /if \(!this\.ensureRuntimeState\(\)\) \{\s*return null;\s*\}/);
+  assert.match(source, /if \(!this\._disposed && this\.isValid && this\._cache\) \{/);
+  assert.match(source, /if \(!this\._disposed && this\.isValid && this\._loading\) \{/);
+});

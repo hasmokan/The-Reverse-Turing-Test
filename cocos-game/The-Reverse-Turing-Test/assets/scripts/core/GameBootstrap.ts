@@ -60,9 +60,10 @@ export class GameBootstrap extends Component {
      * 预加载资源
      */
     private async preloadResources(): Promise<void> {
-        const loader = (this.resourceLoader && this.resourceLoader.isValid)
-            ? this.resourceLoader
-            : ResourceLoader.instance;
+        const singleton = ResourceLoader.instance;
+        const loader = (singleton && singleton.isValid)
+            ? singleton
+            : ((this.resourceLoader && this.resourceLoader.isValid) ? this.resourceLoader : null);
 
         if (!loader) {
             ccError('[GameBootstrap] ResourceLoader 未找到');
@@ -105,9 +106,10 @@ export class GameBootstrap extends Component {
      * 应用所有远程图片到对应的场景节点
      */
     private applyRemoteImages(): void {
-        const loader = (this.resourceLoader && this.resourceLoader.isValid)
-            ? this.resourceLoader
-            : ResourceLoader.instance;
+        const singleton = ResourceLoader.instance;
+        const loader = (singleton && singleton.isValid)
+            ? singleton
+            : ((this.resourceLoader && this.resourceLoader.isValid) ? this.resourceLoader : null);
         if (!loader) return;
 
         const canvas = find('Canvas');

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { readScene } from "./sceneJson.mjs";
 
 function getExistingSceneNames() {
-  return new Set(["MainScene", "MultiPlayerScene"]);
+  return new Set(["MainScene", "MultiPlayerScene", "RankingScene"]);
 }
 
 function resolveNodeRef(scene, ref) {
@@ -117,4 +117,20 @@ test("MultiPlayerController draw panel toggle also manages draw tool buttons", (
   assert.match(source, /const drawingBoardComp = this\.drawingBoardNode\?\.getComponent\('DrawingBoard'\) as any/);
   assert.match(source, /pushUniqueNode\(drawingBoardComp\?\.drawModeButton\?\.node\)/);
   assert.match(source, /pushUniqueNode\(drawingBoardComp\?\.eraserModeButton\?\.node\)/);
+});
+
+test("SceneTransition lazily ensures runtime instance", () => {
+  const source = fs.readFileSync("assets/scripts/core/SceneTransition.ts", "utf-8");
+
+  assert.match(source, /private static ensureRuntimeInstance\(\): SceneTransition \| null/);
+  assert.match(source, /if \(!this\._instance \|\| !this\._instance\.isValid\)/);
+  assert.match(source, /const hostNode = new Node\('SceneTransitionRuntime'\)/);
+});
+
+test("Scene navigation handlers fallback to direct scene load when transition missing", () => {
+  const sceneSwitcher = fs.readFileSync("assets/scripts/ui/common/SceneSwitcher.ts", "utf-8");
+  const menuButton = fs.readFileSync("assets/scripts/ui/main-menu/MenuButtonHandler.ts", "utf-8");
+
+  assert.match(sceneSwitcher, /director\.loadScene\(/);
+  assert.match(menuButton, /director\.loadScene\(/);
 });

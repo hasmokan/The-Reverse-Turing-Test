@@ -1,4 +1,4 @@
-import { _decorator, Component, Button, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
+import { _decorator, Component, Button, director, log as ccLog, warn as ccWarn, error as ccError } from 'cc';
 import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 
 const { ccclass, property } = _decorator;
@@ -38,13 +38,7 @@ export class SceneSwitcher extends Component {
             return;
         }
 
-        if (!SceneTransition.instance) {
-            ccError('SceneTransition 实例未找到！');
-            return;
-        }
-
-        ccLog(`切换到场景: ${this.targetScene}`);
-        SceneTransition.instance.loadScene(
+        this.switchWithFallback(
             this.targetScene,
             this.transitionType as TransitionType,
             this.transitionDuration
@@ -55,15 +49,22 @@ export class SceneSwitcher extends Component {
      * 直接调用方法切换场景（供其他脚本调用）
      */
     public switchToScene(sceneName: string, type?: TransitionType, duration?: number) {
-        if (!SceneTransition.instance) {
-            ccError('SceneTransition 实例未找到！');
-            return;
-        }
-
-        SceneTransition.instance.loadScene(
+        this.switchWithFallback(
             sceneName,
             type || this.transitionType as TransitionType,
             duration || this.transitionDuration
         );
+    }
+
+    private switchWithFallback(sceneName: string, type: TransitionType, duration: number): void {
+        const transition = SceneTransition.instance;
+        if (!transition || !transition.isValid) {
+            ccError('SceneTransition 实例未找到，降级为直接切换场景');
+            director.loadScene(sceneName);
+            return;
+        }
+
+        ccLog(`切换到场景: ${sceneName}`);
+        transition.loadScene(sceneName, type, duration);
     }
 }

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Button, log as ccLog } from 'cc';
+import { _decorator, Component, Node, Button, director, log as ccLog, error as ccError } from 'cc';
 import { SceneTransition, TransitionType } from '../../core/SceneTransition';
 const { ccclass, property } = _decorator;
 
@@ -21,22 +21,10 @@ export class MenuButtonHandler extends Component {
     profileButton: Button = null!;
 
     onLoad() {
-        // 绑定按钮点击事件
-        if (this.singlePlayerButton) {
-            this.singlePlayerButton.node.on(Button.EventType.CLICK, this.onSinglePlayerClick, this);
-        }
-
-        if (this.multiPlayerButton) {
-            this.multiPlayerButton.node.on(Button.EventType.CLICK, this.onMultiPlayerClick, this);
-        }
-
-        if (this.rankingButton) {
-            this.rankingButton.node.on(Button.EventType.CLICK, this.onRankingClick, this);
-        }
-
-        if (this.profileButton) {
-            this.profileButton.node.on(Button.EventType.CLICK, this.onProfileClick, this);
-        }
+        this.bindButtonClick(this.singlePlayerButton, this.onSinglePlayerClick);
+        this.bindButtonClick(this.multiPlayerButton, this.onMultiPlayerClick);
+        this.bindButtonClick(this.rankingButton, this.onRankingClick);
+        this.bindButtonClick(this.profileButton, this.onProfileClick);
     }
 
     /**
@@ -44,11 +32,7 @@ export class MenuButtonHandler extends Component {
      */
     private onSinglePlayerClick() {
         ccLog('点击单人游戏');
-
-        // 使用淡入淡出效果切换到单人游戏场景
-        if (SceneTransition.instance) {
-            SceneTransition.instance.loadScene('MultiPlayerScene', TransitionType.FADE, 0.8);
-        }
+        this.loadSceneWithFallback('MultiPlayerScene', TransitionType.FADE, 0.8);
     }
 
     /**
@@ -56,11 +40,7 @@ export class MenuButtonHandler extends Component {
      */
     private onMultiPlayerClick() {
         ccLog('点击深海鱼缸（多人）');
-
-        // 使用从左滑入效果
-        if (SceneTransition.instance) {
-            SceneTransition.instance.loadScene('MultiPlayerScene', TransitionType.SLIDE_LEFT, 0.8);
-        }
+        this.loadSceneWithFallback('MultiPlayerScene', TransitionType.SLIDE_LEFT, 0.8);
     }
 
     /**
@@ -68,38 +48,59 @@ export class MenuButtonHandler extends Component {
      */
     private onRankingClick() {
         ccLog('点击排行榜');
-
-        // 使用缩放效果
-        if (SceneTransition.instance) {
-            SceneTransition.instance.loadScene('RankingScene', TransitionType.ZOOM, 0.8);
-        }
+        this.loadSceneWithFallback('RankingScene', TransitionType.ZOOM, 0.8);
     }
 
     /**
      * 点击个人中心
      */
     private onProfileClick() {
-        ccLog('点击个人中心');
-
-        // 使用从右滑入效果
-        if (SceneTransition.instance) {
-            SceneTransition.instance.loadScene('ProfileScene', TransitionType.SLIDE_RIGHT, 0.8);
-        }
+        ccLog('点击个人中心（场景未开放，返回主菜单）');
+        this.loadSceneWithFallback('MainScene', TransitionType.SLIDE_RIGHT, 0.8);
     }
 
     onDestroy() {
-        // 移除事件监听（需要检查组件和节点是否有效）
-        if (this.singlePlayerButton && this.singlePlayerButton.isValid && this.singlePlayerButton.node) {
-            this.singlePlayerButton.node.off(Button.EventType.CLICK, this.onSinglePlayerClick, this);
+        this.unbindButtonClick(this.singlePlayerButton, this.onSinglePlayerClick);
+        this.unbindButtonClick(this.multiPlayerButton, this.onMultiPlayerClick);
+        this.unbindButtonClick(this.rankingButton, this.onRankingClick);
+        this.unbindButtonClick(this.profileButton, this.onProfileClick);
+    }
+
+    private resolveButtonNode(button: Button | null): Node | null {
+        if (!button || !button.isValid) {
+            return null;
         }
-        if (this.multiPlayerButton && this.multiPlayerButton.isValid && this.multiPlayerButton.node) {
-            this.multiPlayerButton.node.off(Button.EventType.CLICK, this.onMultiPlayerClick, this);
+
+        const node = button.node;
+        return node && node.isValid ? node : null;
+    }
+
+    private bindButtonClick(button: Button | null, handler: () => void): void {
+        const node = this.resolveButtonNode(button);
+        if (!node) {
+            return;
         }
-        if (this.rankingButton && this.rankingButton.isValid && this.rankingButton.node) {
-            this.rankingButton.node.off(Button.EventType.CLICK, this.onRankingClick, this);
+
+        node.on(Button.EventType.CLICK, handler, this);
+    }
+
+    private unbindButtonClick(button: Button | null, handler: () => void): void {
+        const node = this.resolveButtonNode(button);
+        if (!node) {
+            return;
         }
-        if (this.profileButton && this.profileButton.isValid && this.profileButton.node) {
-            this.profileButton.node.off(Button.EventType.CLICK, this.onProfileClick, this);
+
+        node.off(Button.EventType.CLICK, handler, this);
+    }
+
+    private loadSceneWithFallback(sceneName: string, type: TransitionType, duration: number): void {
+        const transition = SceneTransition.instance;
+        if (!transition || !transition.isValid) {
+            ccError('SceneTransition 实例未找到，降级为直接切换场景');
+            director.loadScene(sceneName);
+            return;
         }
+
+        transition.loadScene(sceneName, type, duration);
     }
 }

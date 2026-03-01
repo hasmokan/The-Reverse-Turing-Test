@@ -30,6 +30,7 @@ export interface LoadResult {
 @ccclass('ResourceLoader')
 export class ResourceLoader extends Component {
     private static _instance: ResourceLoader = null!;
+    private _disposed = false;
 
     // 资源缓存：key -> SpriteFrame
     private _cache: Map<string, SpriteFrame> = new Map();
@@ -57,12 +58,29 @@ export class ResourceLoader extends Component {
         return sys.platform === sys.Platform.WECHAT_GAME;
     }
 
+    private ensureRuntimeState(): boolean {
+        if (this._disposed || !this.isValid) {
+            return false;
+        }
+
+        if (!this._cache) {
+            this._cache = new Map();
+        }
+        if (!this._loading) {
+            this._loading = new Map();
+        }
+
+        return true;
+    }
+
     onLoad() {
         if (ResourceLoader._instance && ResourceLoader._instance !== this) {
             warn('[ResourceLoader] 检测到重复实例，已销毁当前组件');
             this.destroy();
             return;
         }
+        this._disposed = false;
+        this.ensureRuntimeState();
         ResourceLoader._instance = this;
         const env = ResourceLoader._isWeChatMiniGame() ? '微信小游戏' : '浏览器';
         log(`[ResourceLoader] 资源加载器已初始化 (${env}环境)`);
@@ -104,6 +122,15 @@ export class ResourceLoader extends Component {
         _bundleName?: string,
         onProgress?: LoadProgressCallback
     ): Promise<LoadResult> {
+        if (!this.ensureRuntimeState()) {
+            return {
+                success: false,
+                loaded: 0,
+                failed: 0,
+                errors: [{ key: 'ResourceLoader', error: 'ResourceLoader 已销毁或无效' }]
+            };
+        }
+
         const resources = ResourceConfig.getPreloadResources();
 
         if (resources.length === 0) {
@@ -167,25 +194,31 @@ export class ResourceLoader extends Component {
      * 加载单个资源：优先 Bundle，fallback 远程 URL
      */
     private async _loadResource(resource: RemoteResource): Promise<SpriteFrame | null> {
+        if (!this.ensureRuntimeState()) {
+            return null;
+        }
+
         const cacheKey = resource.key;
 
         // 检查缓存
-        if (this._cache.has(cacheKey)) {
+        if (this._cache && this._cache.has(cacheKey)) {
             return this._cache.get(cacheKey)!;
         }
 
         // 检查是否正在加载
-        if (this._loading.has(cacheKey)) {
+        if (this._loading && this._loading.has(cacheKey)) {
             return this._loading.get(cacheKey)!;
         }
 
         const loadPromise = this._doLoad(resource);
-        this._loading.set(cacheKey, loadPromise);
+        this._loading?.set(cacheKey, loadPromise);
 
         try {
             return await loadPromise;
         } finally {
-            this._loading.delete(cacheKey);
+            if (!this._disposed && this.isValid && this._loading) {
+                this._loading.delete(cacheKey);
+            }
         }
     }
 
@@ -247,7 +280,9 @@ export class ResourceLoader extends Component {
                     return;
                 }
 
-                this._cache.set(cacheKey, spriteFrame);
+                if (!this._disposed && this.isValid && this._cache) {
+                    this._cache.set(cacheKey, spriteFrame);
+                }
                 resolve(spriteFrame);
             });
         });
@@ -267,7 +302,12 @@ export class ResourceLoader extends Component {
             const timer = setTimeout(() => {
                 if (!resolved) {
                     resolved = true;
-                    error(`[ResourceLoader] 远程加载超时 (${ResourceLoader.REMOTE_LOAD_TIMEOUT}ms): ${cacheKey}`);
+                    error(
+                        `[ResourceLoader] 远程加载超时 (${ResourceLoader.REMOTE_LOAD_TIMEOUT}ms): ${cacheKey} -> ${url}`
+                    );
+                    warn(
+                        '[ResourceLoader] 请检查：1) 微信开发者工具 urlCheck 设置 2) downloadFile 合法域名 3) COS 资源可达性'
+                    );
                     resolve(null);
                 }
             }, ResourceLoader.REMOTE_LOAD_TIMEOUT);
@@ -290,7 +330,9 @@ export class ResourceLoader extends Component {
                     const spriteFrame = new SpriteFrame();
                     spriteFrame.texture = texture;
 
-                    this._cache.set(cacheKey, spriteFrame);
+                    if (!this._disposed && this.isValid && this._cache) {
+                        this._cache.set(cacheKey, spriteFrame);
+                    }
                     resolve(spriteFrame);
                 } catch (e) {
                     error(`[ResourceLoader] 创建 SpriteFrame 失败: ${cacheKey}`, e);
@@ -304,23 +346,29 @@ export class ResourceLoader extends Component {
      * 从远程 URL 加载图片（公开方法，供外部动态加载使用）
      */
     public async loadRemoteImage(url: string, key?: string): Promise<SpriteFrame | null> {
+        if (!this.ensureRuntimeState()) {
+            return null;
+        }
+
         const cacheKey = key || url;
 
-        if (this._cache.has(cacheKey)) {
+        if (this._cache && this._cache.has(cacheKey)) {
             return this._cache.get(cacheKey)!;
         }
 
-        if (this._loading.has(cacheKey)) {
+        if (this._loading && this._loading.has(cacheKey)) {
             return this._loading.get(cacheKey)!;
         }
 
         const loadPromise = this._loadFromRemoteUrl(url, cacheKey);
-        this._loading.set(cacheKey, loadPromise);
+        this._loading?.set(cacheKey, loadPromise);
 
         try {
             return await loadPromise;
         } finally {
-            this._loading.delete(cacheKey);
+            if (!this._disposed && this.isValid && this._loading) {
+                this._loading.delete(cacheKey);
+            }
         }
     }
 
@@ -328,14 +376,14 @@ export class ResourceLoader extends Component {
      * 根据 key 获取已加载的 SpriteFrame
      */
     public getSpriteFrame(key: string): SpriteFrame | null {
-        return this._cache.get(key) || null;
+        return this._cache?.get(key) || null;
     }
 
     /**
      * 检查资源是否已加载
      */
     public isLoaded(key: string): boolean {
-        return this._cache.has(key);
+        return this._cache?.has(key) || false;
     }
 
     /**
@@ -384,8 +432,8 @@ export class ResourceLoader extends Component {
      * 清除所有缓存
      */
     public clearCache(): void {
-        this._cache.clear();
-        this._loading.clear();
+        this._cache?.clear();
+        this._loading?.clear();
         log('[ResourceLoader] 缓存已清除');
     }
 
@@ -393,7 +441,7 @@ export class ResourceLoader extends Component {
      * 清除指定资源的缓存
      */
     public clearCacheByKey(key: string): void {
-        this._cache.delete(key);
+        this._cache?.delete(key);
         log(`[ResourceLoader] 已清除缓存: ${key}`);
     }
 
@@ -413,6 +461,7 @@ export class ResourceLoader extends Component {
     }
 
     onDestroy() {
+        this._disposed = true;
         if (ResourceLoader._instance !== this) {
             return;
         }

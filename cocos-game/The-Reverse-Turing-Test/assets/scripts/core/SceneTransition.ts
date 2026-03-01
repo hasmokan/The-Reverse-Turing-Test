@@ -27,10 +27,49 @@ export class SceneTransition extends Component {
     private static _instance: SceneTransition = null!;
 
     public static get instance(): SceneTransition {
+        if (!this._instance || !this._instance.isValid) {
+            this._instance = this.ensureRuntimeInstance() || null!;
+        }
         return this._instance;
     }
 
+    private static ensureRuntimeInstance(): SceneTransition | null {
+        const scene = director.getScene();
+        if (!scene || !scene.isValid) {
+            return null;
+        }
+
+        const existing = this.findInTree(scene);
+        if (existing && existing.isValid) {
+            return existing;
+        }
+
+        const hostNode = new Node('SceneTransitionRuntime');
+        scene.addChild(hostNode);
+        return hostNode.addComponent(SceneTransition);
+    }
+
+    private static findInTree(root: Node): SceneTransition | null {
+        const component = root.getComponent(SceneTransition);
+        if (component && component.isValid) {
+            return component;
+        }
+
+        for (const child of root.children) {
+            const found = this.findInTree(child);
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     onLoad() {
+        if (SceneTransition._instance && SceneTransition._instance !== this && SceneTransition._instance.isValid) {
+            this.destroy();
+            return;
+        }
         SceneTransition._instance = this;
 
         // 重要：将 TransitionLayer 设为当前节点的子节点并持久化
@@ -115,7 +154,10 @@ export class SceneTransition extends Component {
      */
     private playTransition(type: TransitionType, duration: number, midCallback: () => void) {
         const opacity = this.transitionLayer.getComponent(UIOpacity);
-        if (!opacity) return;
+        if (!opacity) {
+            midCallback();
+            return;
+        }
 
         switch (type) {
             case TransitionType.FADE:

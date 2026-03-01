@@ -1007,8 +1007,6 @@ export class MultiPlayerController extends Component {
             buttonNode = new Node(name);
             parent.addChild(buttonNode);
             buttonNode.setPosition(position);
-            const t = buttonNode.addComponent(UITransform);
-            t.setContentSize(180, 58);
 
             const bg = buttonNode.addComponent(Sprite);
             bg.color = bgColor;

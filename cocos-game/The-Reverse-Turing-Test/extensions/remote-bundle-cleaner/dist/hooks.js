@@ -23,7 +23,7 @@ const path = require('path');
 const zlib = require('zlib');
 
 const PACKAGE_NAME = 'remote-bundle-cleaner';
-const HOOK_VERSION = '2026-02-21-fix4930-v2';
+const HOOK_VERSION = '2026-03-01-fix4930-v6';
 const REMOTE_BUNDLES = ['RemoteUI'];
 // 可选策略：
 // - local-safe：稳定优先，不修改场景引用、不清理 native、不生成占位图
@@ -34,6 +34,13 @@ const BUILD_STRATEGY = 'remote-placeholder';
 const SCENE_FILES = [
     'assets/scenes/MainScene.scene',
     'assets/scenes/MultiPlayerScene.scene',
+    'assets/scenes/RankingScene.scene',
+];
+
+const REQUIRED_BUILD_SCENE_NAMES = [
+    'MainScene',
+    'MultiPlayerScene',
+    'RankingScene',
 ];
 
 // SpriteFrame sub-asset 后缀
@@ -89,6 +96,199 @@ function getProjectRoot(options) {
 
 function getBackupPath(scenePath) {
     return scenePath + '.build-bak';
+}
+
+function sceneNameToDbUrl(sceneName) {
+    return `db://assets/scenes/${sceneName}.scene`;
+}
+
+function dbSceneUrlToAbsPath(projectRoot, sceneUrl) {
+    if (typeof sceneUrl !== 'string') return null;
+    const prefix = 'db://';
+    if (!sceneUrl.startsWith(prefix)) return null;
+    return path.join(projectRoot, sceneUrl.slice(prefix.length));
+}
+
+function readSceneUuidByName(projectRoot, sceneName) {
+    const scenePath = path.join(projectRoot, 'assets', 'scenes', `${sceneName}.scene`);
+    const metaPath = `${scenePath}.meta`;
+    if (!fs.existsSync(scenePath) || !fs.existsSync(metaPath)) {
+        return null;
+    }
+
+    try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        return typeof meta.uuid === 'string' && meta.uuid ? meta.uuid : null;
+    } catch (e) {
+        console.warn(PACKAGE_NAME, `读取场景 meta 失败: ${metaPath}, ${e.message}`);
+        return null;
+    }
+}
+
+function persistNormalizedScenesToBuilderProfile(projectRoot, platform, normalizedScenes) {
+    if (platform !== 'wechatgame') return;
+
+    const builderProfilePath = path.join(projectRoot, 'profiles', 'v2', 'packages', 'builder.json');
+    if (!fs.existsSync(builderProfilePath)) return;
+
+    try {
+        const profile = JSON.parse(fs.readFileSync(builderProfilePath, 'utf-8'));
+        const taskMap = profile?.BuildTaskManager?.taskMap;
+        if (!taskMap || typeof taskMap !== 'object') return;
+
+        const nextScenes = normalizedScenes
+            .filter((item) => item && typeof item.url === 'string' && typeof item.uuid === 'string' && item.uuid)
+            .map((item) => ({ url: item.url, uuid: item.uuid }));
+        if (nextScenes.length === 0) return;
+
+        let updatedCount = 0;
+        for (const task of Object.values(taskMap)) {
+            if (!task || task.type !== 'build' || !task.options) continue;
+            if (task.options.platform && task.options.platform !== platform) continue;
+
+            const prevScenes = Array.isArray(task.options.scenes) ? task.options.scenes : [];
+            const same =
+                prevScenes.length === nextScenes.length &&
+                prevScenes.every(
+                    (scene, index) =>
+                        scene &&
+                        scene.url === nextScenes[index].url &&
+                        scene.uuid === nextScenes[index].uuid
+                );
+            if (same) continue;
+
+            task.options.scenes = nextScenes.map((scene) => ({ ...scene }));
+            updatedCount++;
+        }
+
+        if (updatedCount > 0) {
+            fs.writeFileSync(builderProfilePath, JSON.stringify(profile, null, 2), 'utf-8');
+            console.log(
+                PACKAGE_NAME,
+                `[PRE-BUILD] 已同步 builder 配置中的场景列表（${updatedCount} 个任务）`
+            );
+        }
+    } catch (e) {
+        console.warn(PACKAGE_NAME, `同步 builder 场景配置失败: ${e.message}`);
+    }
+}
+
+function normalizeBuildScenes(options, projectRoot) {
+    const current = Array.isArray(options?.scenes) ? options.scenes : [];
+    const sceneByUrl = new Map();
+
+    for (const item of current) {
+        if (!item || typeof item.url !== 'string') continue;
+        const absPath = dbSceneUrlToAbsPath(projectRoot, item.url);
+        if (!absPath || !fs.existsSync(absPath)) {
+            console.log(PACKAGE_NAME, `[PRE-BUILD] 移除不存在场景: ${item.url}`);
+            continue;
+        }
+        sceneByUrl.set(item.url, item);
+    }
+
+    for (const sceneName of REQUIRED_BUILD_SCENE_NAMES) {
+        const sceneUrl = sceneNameToDbUrl(sceneName);
+        if (sceneByUrl.has(sceneUrl)) continue;
+
+        const uuid = readSceneUuidByName(projectRoot, sceneName);
+        if (!uuid) {
+            console.warn(PACKAGE_NAME, `[PRE-BUILD] 必需场景缺失，无法加入构建: ${sceneName}`);
+            continue;
+        }
+
+        sceneByUrl.set(sceneUrl, { url: sceneUrl, uuid });
+        console.log(PACKAGE_NAME, `[PRE-BUILD] 自动加入构建场景: ${sceneUrl}`);
+    }
+
+    options.scenes = Array.from(sceneByUrl.values());
+    persistNormalizedScenesToBuilderProfile(projectRoot, options?.platform, options.scenes);
+    console.log(
+        PACKAGE_NAME,
+        `[PRE-BUILD] 最终构建场景: ${options.scenes.map((s) => s.url).join(', ')}`
+    );
+}
+
+function ensureMainBundleSceneInBuildOutput(dest, projectRoot, sceneName) {
+    const sceneDbUrl = `db://assets/scenes/${sceneName}.scene`;
+    const scenePathKey = `db:/assets/scenes/${sceneName}`;
+    const mainConfigPath = path.join(dest, 'assets', 'main', 'config.json');
+    if (!fs.existsSync(mainConfigPath)) return false;
+
+    let config = null;
+    try {
+        config = JSON.parse(fs.readFileSync(mainConfigPath, 'utf-8'));
+    } catch (e) {
+        console.warn(PACKAGE_NAME, `读取 main/config.json 失败，无法补丁场景 ${sceneName}: ${e.message}`);
+        return false;
+    }
+
+    if (config?.scenes && Object.prototype.hasOwnProperty.call(config.scenes, sceneDbUrl)) {
+        return false;
+    }
+
+    const sceneUuid = readSceneUuidByName(projectRoot, sceneName);
+    if (!sceneUuid) {
+        console.warn(PACKAGE_NAME, `无法补丁场景 ${sceneName}: 未找到场景 UUID`);
+        return false;
+    }
+
+    const librarySceneJsonPath = path.join(projectRoot, 'library', sceneUuid.slice(0, 2), `${sceneUuid}.json`);
+    if (!fs.existsSync(librarySceneJsonPath)) {
+        console.warn(PACKAGE_NAME, `无法补丁场景 ${sceneName}: 缺少 library 场景数据 ${librarySceneJsonPath}`);
+        return false;
+    }
+
+    const importDir = path.join(dest, 'assets', 'main', 'import', sceneUuid.slice(0, 2));
+    const importSceneJsonPath = path.join(importDir, `${sceneUuid}.json`);
+    fs.mkdirSync(importDir, { recursive: true });
+    fs.copyFileSync(librarySceneJsonPath, importSceneJsonPath);
+
+    if (!Array.isArray(config.uuids)) config.uuids = [];
+    if (!Array.isArray(config.types)) config.types = [];
+    if (!config.paths || typeof config.paths !== 'object') config.paths = {};
+    if (!config.scenes || typeof config.scenes !== 'object') config.scenes = {};
+
+    let typeIndex = config.types.indexOf('cc.SceneAsset');
+    if (typeIndex < 0) {
+        config.types.push('cc.SceneAsset');
+        typeIndex = config.types.length - 1;
+    }
+
+    let uuidIndex = config.uuids.indexOf(sceneUuid);
+    if (uuidIndex < 0) {
+        config.uuids.push(sceneUuid);
+        uuidIndex = config.uuids.length - 1;
+    }
+
+    const pathKeys = Object.keys(config.paths)
+        .map((k) => Number(k))
+        .filter((n) => Number.isInteger(n) && n >= 0);
+    const nextPathIndex = pathKeys.length > 0 ? Math.max(...pathKeys) + 1 : 0;
+
+    config.paths[String(nextPathIndex)] = [scenePathKey, uuidIndex, typeIndex];
+    config.scenes[sceneDbUrl] = nextPathIndex;
+
+    fs.writeFileSync(mainConfigPath, JSON.stringify(config), 'utf-8');
+    console.log(PACKAGE_NAME, `[POST-BUILD] 已补丁 main/config 场景: ${sceneName}`);
+    return true;
+}
+
+function patchMainBundleRequiredScenes(dest, projectRoot, platform) {
+    if (platform !== 'wechatgame') return;
+
+    // Cocos 3.8.8 在某些情况下不会采纳 onBeforeBuild 对 scenes 的变更；
+    // 这里在输出产物层面兜底，确保运行时 loadScene 可找到关键场景。
+    const requiredScenes = ['MultiPlayerScene', 'RankingScene'];
+    let patchedCount = 0;
+    for (const sceneName of requiredScenes) {
+        if (ensureMainBundleSceneInBuildOutput(dest, projectRoot, sceneName)) {
+            patchedCount++;
+        }
+    }
+    if (patchedCount > 0) {
+        console.log(PACKAGE_NAME, `[POST-BUILD] main/config 场景兜底补丁完成: ${patchedCount} 个`);
+    }
 }
 
 function writeFileAtomic(filePath, buffer) {
@@ -640,6 +840,120 @@ function patchWeChatSettings(dest, platform) {
 }
 
 /**
+ * 修正微信开发者工具项目配置，避免本地调试时被 URL 合法域名校验卡住。
+ * 仅影响 devtools 本地调试，不影响线上域名白名单要求。
+ */
+function patchWeChatProjectConfig(dest, platform) {
+    if (platform !== 'wechatgame') return;
+
+    const projectConfigPath = path.join(dest, 'project.config.json');
+    if (!fs.existsSync(projectConfigPath)) {
+        console.warn(PACKAGE_NAME, `project.config.json 不存在，跳过修正: ${projectConfigPath}`);
+        return;
+    }
+
+    try {
+        const projectConfig = JSON.parse(fs.readFileSync(projectConfigPath, 'utf-8'));
+        if (!projectConfig.setting) {
+            projectConfig.setting = {};
+        }
+
+        const previousUrlCheck = projectConfig.setting.urlCheck;
+        if (previousUrlCheck !== false) {
+            projectConfig.setting.urlCheck = false;
+            fs.writeFileSync(projectConfigPath, JSON.stringify(projectConfig), 'utf-8');
+            console.log(PACKAGE_NAME, `已修正 project.config.json setting.urlCheck: "${previousUrlCheck}" -> false`);
+        } else {
+            console.log(PACKAGE_NAME, 'project.config.json setting.urlCheck 已是 false');
+        }
+    } catch (e) {
+        console.warn(PACKAGE_NAME, `修正 project.config.json 失败: ${e.message}`);
+    }
+}
+
+/**
+ * 修正微信 devtools 新版返回 http://tmp/... 的兼容问题：
+ * engine-adapter 会对本地路径做 fs.exists 校验，但 http://tmp 在某些版本下会被误判不存在。
+ * 这里对 http://tmp 直接放行，避免误判导致远程图整体加载失败。
+ */
+function patchWeChatEngineAdapter(dest, platform) {
+    if (platform !== 'wechatgame') return;
+
+    const engineAdapterPath = path.join(dest, 'engine-adapter.js');
+    if (!fs.existsSync(engineAdapterPath)) {
+        console.warn(PACKAGE_NAME, `engine-adapter.js 不存在，跳过兼容补丁: ${engineAdapterPath}`);
+        return;
+    }
+
+    const marker = '__REMOTE_BUNDLE_CLEANER_TMP_HTTP_GUARD__';
+    const malformedGuard = String.raw`if(/^https?:\\/\\/tmp\\//.test(t))`;
+    const legacyGuards = [
+        malformedGuard,
+        String.raw`if(/^https?:\/\/tmp\//.test(t))`,
+    ];
+    const stableGuard = 'if(0===t.indexOf("http://tmp/")||0===t.indexOf("https://tmp/"))';
+    const canonicalFunctionX =
+        `function x(t,e,n){${stableGuard}return n(null,t);r(t,function(e){e?n(null,t):n(new Error("file ".concat(t," does not exist!")))})};var ` +
+        marker +
+        '=true;';
+    let content = fs.readFileSync(engineAdapterPath, 'utf-8');
+    let patched = false;
+
+    // 1) 先处理可确定的旧片段（历史注入版本）
+    for (const legacyGuard of legacyGuards) {
+        if (content.includes(legacyGuard)) {
+            content = content.split(legacyGuard).join(stableGuard);
+            patched = true;
+        }
+    }
+
+    // 2) 兜底处理：匹配更宽松的“转义异常”形态，避免因反斜杠层级差异漏修
+    const looseMalformedGuardRegex = /if\(\s*\/\^https\?:\\+\/\\+\/tmp\\+\/\/\.test\(t\)\s*\)/g;
+    if (looseMalformedGuardRegex.test(content)) {
+        content = content.replace(looseMalformedGuardRegex, stableGuard);
+        patched = true;
+    }
+
+    // 3) 强制归一化 function x 整段逻辑，保证每次构建产物都是稳定形态
+    const functionXStart = content.indexOf('function x(t,e,n){');
+    const functionXEnd = functionXStart >= 0 ? content.indexOf('function T(', functionXStart) : -1;
+    if (functionXStart >= 0 && functionXEnd > functionXStart) {
+        const currentFunctionXBlock = content.slice(functionXStart, functionXEnd);
+        if (currentFunctionXBlock !== canonicalFunctionX) {
+            content =
+                content.slice(0, functionXStart) +
+                canonicalFunctionX +
+                content.slice(functionXEnd);
+            patched = true;
+        }
+    } else {
+        const needle = 'function x(t,e,n){r(t,function(e){e?n(null,t):n(new Error("file ".concat(t," does not exist!")))})}';
+        if (content.includes(needle)) {
+            content = content.replace(needle, canonicalFunctionX);
+            patched = true;
+        } else {
+            console.warn(PACKAGE_NAME, 'engine-adapter 结构不匹配，未找到 file-exists 校验函数，跳过兼容补丁');
+            return;
+        }
+    }
+
+    if (patched) {
+        fs.writeFileSync(engineAdapterPath, content, 'utf-8');
+        console.log(PACKAGE_NAME, 'engine-adapter http://tmp 兼容补丁已升级为前缀判断');
+    } else {
+        console.log(PACKAGE_NAME, 'engine-adapter http://tmp 兼容补丁已存在且为最新版本，跳过');
+    }
+
+    // 4) 语法自检：尽早发现异常构建产物，避免 DevTools 阶段才报错
+    try {
+        // eslint-disable-next-line no-new-func
+        new Function(content);
+    } catch (e) {
+        console.warn(PACKAGE_NAME, `engine-adapter 语法检查失败: ${e.message}`);
+    }
+}
+
+/**
  * 为 wechatgame 的 game.js 注入首屏容错包装：
  * - first-screen 的 start/setProgress/end 最多等待 N ms，超时自动放行
  * - 避免真机上首屏 Promise 卡死导致一直黑屏
@@ -698,6 +1012,7 @@ function patchWeChatGameJs(dest, platform) {
 exports.onBeforeBuild = async function (options) {
     const projectRoot = getProjectRoot(options);
     console.log(PACKAGE_NAME, `[PRE-BUILD][${HOOK_VERSION}] 项目路径: ${projectRoot}`);
+    normalizeBuildScenes(options, projectRoot);
 
     if (BUILD_STRATEGY === 'local-safe') {
         // 防止上次异常中断留下备份，先尝试恢复
@@ -746,9 +1061,12 @@ exports.onAfterBuild = async function (options, result) {
         return;
     }
 
-    // 0. 修正微信启动配置（避免 assets.server 指向远程导致首屏黑屏）
+    // 0. 修正微信启动/调试配置（避免本地调试域名校验与首屏卡住）
+    patchWeChatProjectConfig(dest, platform);
     patchWeChatSettings(dest, platform);
+    patchWeChatEngineAdapter(dest, platform);
     patchWeChatGameJs(dest, platform);
+    patchMainBundleRequiredScenes(dest, projectRoot, platform);
 
     if (BUILD_STRATEGY === 'local-safe') {
         console.log(PACKAGE_NAME, '[POST-BUILD] local-safe 模式：不清理 native，不生成占位图（稳定优先）');
