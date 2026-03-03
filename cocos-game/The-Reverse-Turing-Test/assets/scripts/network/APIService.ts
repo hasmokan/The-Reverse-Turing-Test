@@ -7,36 +7,49 @@
 
 import { sys, warn as ccWarn, error as ccError } from 'cc';
 import { ENV_CONFIG, NETWORK_CONFIG, ONLINE_FEATURES } from '../data/GameConstants';
-import { ThemeConfig } from '../data/GameTypes';
-import { DataConverter } from './DataConverter';
 
 // ==================== 响应类型 ====================
 
 export interface RoomResponse {
-    id: string;
-    roomCode: string;
-    themeId: string;
+    roomId: string;
     status: string;
     totalItems: number;
     aiCount: number;
     onlineCount: number;
+    turbidity: number;
+    votingStartedAt?: string;
+    votingEndsAt?: string;
+}
+
+export interface RoomWithThemeResponse {
+    room: RoomResponse;
+    theme: ThemeResponse;
+}
+
+export interface ThemeRoomResponse {
+    roomCode: string;
+    theme: ThemeResponse;
 }
 
 export interface DrawingResponse {
     id: string;
-    roomId: string;
-    isAI: boolean;
     imageUrl: string;
     name: string;
-    description: string;
+    description?: string;
     author: string;
-    createdAt: string;
+    position?: { x: number; y: number };
+    velocity?: { vx: number; vy: number };
+    rotation?: number;
+    scale?: number;
+    flipX?: boolean;
+    voteCount?: number;
+    isEliminated?: boolean;
+    createdAt?: string;
 }
 
 export interface ThemeResponse {
     themeId: string;
     themeName: string;
-    description: string;
     assets: {
         backgroundUrl: string;
         particleEffect?: string;
@@ -52,16 +65,39 @@ export interface ThemeResponse {
     };
 }
 
+export interface GuestLoginResponse {
+    token: string;
+    userId: string;
+    isNewUser: boolean;
+    isGuest: boolean;
+    deviceToken: string;
+}
+
 // ==================== API 服务类 ====================
 
 export class APIService {
     private static baseUrl: string = ENV_CONFIG.API_URL;
+    private static authToken: string | null = null;
+    private static userId: string | null = null;
+    private static deviceToken: string | null = null;
 
     /**
      * 设置 API 基础 URL
      */
     static setBaseUrl(url: string): void {
         this.baseUrl = url;
+    }
+
+    static setAuthToken(token: string | null): void {
+        this.authToken = token;
+    }
+
+    static getAuthToken(): string | null {
+        return this.authToken;
+    }
+
+    static getCurrentUserId(): string | null {
+        return this.userId;
     }
 
     // ==================== 通用请求方法 ====================
@@ -72,18 +108,25 @@ export class APIService {
     private static async request<T>(
         method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         path: string,
-        body?: any
+        body?: any,
+        parseJson: boolean = true
     ): Promise<T> {
         const url = `${this.baseUrl}${path}`;
 
-        const options: RequestInit = {
-            method,
-            headers: {
-                'Content-Type': 'application/json'
-            }
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
         };
 
-        if (body) {
+        if (this.authToken) {
+            headers['Authorization'] = `Bearer ${this.authToken}`;
+        }
+
+        const options: RequestInit = {
+            method,
+            headers
+        };
+
+        if (body !== undefined) {
             options.body = JSON.stringify(body);
         }
 
@@ -101,6 +144,10 @@ export class APIService {
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            if (!parseJson) {
+                return await response.text() as unknown as T;
             }
 
             return await response.json();
@@ -127,13 +174,18 @@ export class APIService {
                 return;
             }
 
+            const header: Record<string, string> = {
+                'Content-Type': 'application/json'
+            };
+            if (this.authToken) {
+                header['Authorization'] = `Bearer ${this.authToken}`;
+            }
+
             wx.request({
                 url: `${this.baseUrl}${path}`,
                 method,
                 data: body,
-                header: {
-                    'Content-Type': 'application/json'
-                },
+                header,
                 timeout: NETWORK_CONFIG.REQUEST_TIMEOUT,
                 success: (res: any) => {
                     if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -155,16 +207,49 @@ export class APIService {
     private static async fetch<T>(
         method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         path: string,
-        body?: any
+        body?: any,
+        parseJson: boolean = true
     ): Promise<T> {
         if (!ONLINE_FEATURES.ENABLED) {
             throw new Error('[APIService] ONLINE_FEATURES.ENABLED=false，已禁用联网请求');
         }
 
         if (sys.platform === sys.Platform.WECHAT_GAME) {
+            // 小游戏接口大多返回 JSON；当前仅健康检查需要文本兼容，这里在上层处理
             return this.weChatRequest(method, path, body);
         }
-        return this.request(method, path, body);
+        return this.request(method, path, body, parseJson);
+    }
+
+    // ==================== 认证 API ====================
+
+    static async ensureGuestAuth(sessionId?: string): Promise<GuestLoginResponse> {
+        if (this.authToken && this.userId) {
+            return {
+                token: this.authToken,
+                userId: this.userId,
+                isNewUser: false,
+                isGuest: true,
+                deviceToken: this.deviceToken || ''
+            };
+        }
+
+        const storedDeviceToken = this.getStoredDeviceToken();
+        const payload: Record<string, string> = {
+            device_token: storedDeviceToken,
+        };
+
+        if (sessionId) {
+            payload.session_id = sessionId;
+        }
+
+        const resp = await this.fetch<GuestLoginResponse>('POST', '/api/auth/guest/login', payload);
+        this.authToken = resp.token;
+        this.userId = resp.userId;
+        this.deviceToken = resp.deviceToken;
+        this.storeDeviceToken(resp.deviceToken);
+
+        return resp;
     }
 
     // ==================== 主题 API ====================
@@ -189,15 +274,15 @@ export class APIService {
      * 创建或获取房间
      * 如果该主题已有活跃房间，返回现有房间
      */
-    static async getOrCreateRoom(themeId: string): Promise<RoomResponse> {
-        return this.fetch<RoomResponse>('POST', `/api/themes/${themeId}/rooms`);
+    static async getOrCreateRoom(themeId: string): Promise<ThemeRoomResponse> {
+        return this.fetch<ThemeRoomResponse>('GET', `/api/themes/${themeId}/room`);
     }
 
     /**
      * 获取房间信息
      */
-    static async getRoom(roomCode: string): Promise<RoomResponse> {
-        return this.fetch<RoomResponse>('GET', `/api/rooms/${roomCode}`);
+    static async getRoom(roomCode: string): Promise<RoomWithThemeResponse> {
+        return this.fetch<RoomWithThemeResponse>('GET', `/api/rooms/${roomCode}`);
     }
 
     // ==================== 绘画 API ====================
@@ -235,12 +320,12 @@ export class APIService {
      * 举报绘画
      */
     static async reportDrawing(
-        roomCode: string,
+        _roomCode: string,
         drawingId: string,
         sessionId: string,
         reason?: string
     ): Promise<void> {
-        await this.fetch<void>('POST', `/api/rooms/${roomCode}/drawings/${drawingId}/report`, {
+        await this.fetch<void>('POST', `/api/drawings/${drawingId}/report`, {
             session_id: sessionId,
             reason: reason || ''
         });
@@ -252,7 +337,14 @@ export class APIService {
      * 检查服务器健康状态
      */
     static async healthCheck(): Promise<{ status: string }> {
-        return this.fetch<{ status: string }>('GET', '/health');
+        try {
+            // 先尝试 JSON 解析
+            return await this.fetch<{ status: string }>('GET', '/health');
+        } catch (_err) {
+            // 兼容后端返回纯文本 "OK"
+            const text = await this.fetch<string>('GET', '/health', undefined, false);
+            return { status: (text || '').trim().toLowerCase() || 'ok' };
+        }
     }
 
     // ==================== AI 图片审核 ====================
@@ -322,5 +414,26 @@ export class APIService {
             // 审核失败时默认通过，避免阻塞用户
             return { isAppropriate: true };
         }
+    }
+
+    private static getStoredDeviceToken(): string {
+        if (this.deviceToken) return this.deviceToken;
+
+        const key = 'rtt_device_token';
+        const existing = sys.localStorage?.getItem(key);
+        if (existing) {
+            this.deviceToken = existing;
+            return existing;
+        }
+
+        const generated = `rtt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        this.deviceToken = generated;
+        sys.localStorage?.setItem(key, generated);
+        return generated;
+    }
+
+    private static storeDeviceToken(token: string): void {
+        this.deviceToken = token;
+        sys.localStorage?.setItem('rtt_device_token', token);
     }
 }

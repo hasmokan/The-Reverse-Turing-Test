@@ -3,6 +3,7 @@ import { _decorator, Component, sys, game, log as ccLog, warn as ccWarn, error a
 import { io, Socket } from '../lib/socket-io';
 import { GameManager } from '../core/GameManager';
 import { DataConverter } from './DataConverter';
+import { APIService } from './APIService';
 import {
     SyncStateResponse, FishEliminateData, ToastType
 } from '../data/GameTypes';
@@ -175,6 +176,12 @@ export class SocketClient extends Component {
         GameManager.instance.setSynced(false);
 
         try {
+            const gm = GameManager.instance;
+            const auth = await APIService.ensureGuestAuth(gm.playerId || undefined);
+            if (auth.userId) {
+                gm.setPlayerId(auth.userId);
+            }
+
             const socketUrl = ENV_CONFIG.WS_URL;
             ccLog('[SocketClient] Connecting to:', socketUrl);
 
@@ -188,6 +195,9 @@ export class SocketClient extends Component {
                 reconnectionDelay: NETWORK_CONFIG.RECONNECT_DELAY,
                 timeout: 10000,
                 transports: ['websocket'],  // 仅使用 WebSocket
+                auth: {
+                    token: APIService.getAuthToken() || undefined,
+                },
                 // 注入自定义 WebSocket 实现
                 ...(sys.platform === sys.Platform.WECHAT_GAME && {
                     webSocketCtor: WebSocketImpl
