@@ -3,6 +3,7 @@
 
 use chrono::{Duration, Utc};
 use socketioxide::extract::{Data, SocketRef, State as SioState};
+use socketioxide::SocketIo;
 use std::sync::Arc;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -64,6 +65,57 @@ pub fn on_connect(socket: SocketRef, _state: SioState<Arc<AppState>>) {
     socket.on("vote:chase", on_vote_chase);
     socket.on("comment:add", on_comment_add);
     socket.on_disconnect(on_disconnect);
+}
+
+/// 背景守护：定期推进“无人操作导致卡住”的房间相位（尤其 voting 超时）。
+pub async fn start_phase_guard(io: SocketIo, state: Arc<AppState>) {
+    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
+    loop {
+        ticker.tick().await;
+        if let Err(err) = tick_expired_voting_rooms(&io, &state).await {
+            tracing::warn!("[PhaseGuard] tick failed: {}", err);
+        }
+    }
+}
+
+async fn tick_expired_voting_rooms(io: &SocketIo, state: &AppState) -> Result<(), sqlx::Error> {
+    let rooms: Vec<Room> = sqlx::query_as(
+        "SELECT * FROM rooms
+         WHERE status = 'voting'
+           AND voting_ends_at IS NOT NULL
+           AND NOW() >= voting_ends_at",
+    )
+    .fetch_all(&state.db)
+    .await?;
+
+    for room in rooms {
+        check_game_end_with_io(io, state, &room, false).await;
+
+        let refreshed: Room = match sqlx::query_as("SELECT * FROM rooms WHERE id = $1")
+            .bind(room.id)
+            .fetch_one(&state.db)
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        let mut final_room = refreshed.clone();
+        if refreshed.status != "gameover" {
+            reset_votes_and_exit_voting(state, refreshed.id).await;
+            if let Ok(after_reset) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+                .bind(refreshed.id)
+                .fetch_one(&state.db)
+                .await
+            {
+                final_room = after_reset;
+            }
+        }
+
+        emit_phase_update_with_io(io, &final_room);
+    }
+
+    Ok(())
 }
 
 /// 加入房间
@@ -526,6 +578,135 @@ async fn check_game_end(
     }
 }
 
+async fn check_game_end_with_io(io: &SocketIo, state: &AppState, room: &Room, broadcast_phase_update: bool) {
+    let room = match sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+        .bind(room.id)
+        .fetch_one(&state.db)
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+
+    #[derive(sqlx::FromRow)]
+    struct GameStats {
+        ai_alive: i64,
+        ai_eliminated: i64,
+        human_alive: i64,
+        human_eliminated: i64,
+    }
+
+    let stats: Option<GameStats> = sqlx::query_as(
+        "SELECT 
+            COUNT(*) FILTER (WHERE is_ai = TRUE AND is_eliminated = FALSE) as ai_alive,
+            COUNT(*) FILTER (WHERE is_ai = TRUE AND is_eliminated = TRUE) as ai_eliminated,
+            COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = FALSE) as human_alive,
+            COUNT(*) FILTER (WHERE is_ai = FALSE AND is_eliminated = TRUE) as human_eliminated
+         FROM drawings WHERE room_id = $1",
+    )
+    .bind(room.id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
+    let Some(stats) = stats else {
+        return;
+    };
+
+    let human_total = stats.human_alive + stats.human_eliminated;
+    let ai_total = stats.ai_alive + stats.ai_eliminated;
+    if ai_total < 1 || human_total < 1 {
+        return;
+    }
+
+    let max_human_eliminated =
+        game_rules::human_eliminated_limit(human_total, state.config.human_eliminated_ratio);
+
+    if stats.human_eliminated >= max_human_eliminated {
+        let defeat_data = serde_json::json!({
+            "reason": "too_many_human_killed",
+            "humanKilled": stats.human_eliminated,
+            "aiRemaining": stats.ai_alive,
+            "humanRemaining": stats.human_alive,
+            "humanTotal": human_total
+        });
+        let _ = io.within(room.room_code.clone()).emit("game:defeat", &defeat_data);
+        let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+            .bind(room.id)
+            .execute(&state.db)
+            .await;
+        if let Ok(updated_room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+            .bind(room.id)
+            .fetch_one(&state.db)
+            .await
+        {
+            if broadcast_phase_update {
+                emit_phase_update_with_io(io, &updated_room);
+            }
+        }
+        tracing::info!(
+            "[Game] Defeat: {} humans killed in room {}",
+            stats.human_eliminated,
+            room.room_code
+        );
+        return;
+    }
+
+    let min_human_survive =
+        game_rules::min_human_survive(human_total, state.config.victory_human_survive_ratio);
+    if stats.ai_alive == 0 && stats.human_alive >= min_human_survive {
+        let victory_data = serde_json::json!({
+            "mvpId": "",
+            "mvpName": "Unknown",
+            "aiRemaining": stats.ai_alive,
+            "humanRemaining": stats.human_alive,
+            "humanTotal": human_total
+        });
+        let _ = io.within(room.room_code.clone()).emit("game:victory", &victory_data);
+        let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+            .bind(room.id)
+            .execute(&state.db)
+            .await;
+        if let Ok(updated_room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+            .bind(room.id)
+            .fetch_one(&state.db)
+            .await
+        {
+            if broadcast_phase_update {
+                emit_phase_update_with_io(io, &updated_room);
+            }
+        }
+        tracing::info!("[Game] Victory in room {}", room.room_code);
+    } else if game_rules::ai_overflow(
+        stats.ai_alive,
+        stats.human_alive,
+        state.config.ai_overflow_delta,
+    ) {
+        let defeat_data = serde_json::json!({
+            "reason": "ai_overrun",
+            "aiRemaining": stats.ai_alive,
+            "humanRemaining": stats.human_alive,
+            "humanTotal": human_total
+        });
+        let _ = io.within(room.room_code.clone()).emit("game:defeat", &defeat_data);
+        let _ = sqlx::query("UPDATE rooms SET status = 'gameover' WHERE id = $1")
+            .bind(room.id)
+            .execute(&state.db)
+            .await;
+        if let Ok(updated_room) = sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE id = $1")
+            .bind(room.id)
+            .fetch_one(&state.db)
+            .await
+        {
+            if broadcast_phase_update {
+                emit_phase_update_with_io(io, &updated_room);
+            }
+        }
+        tracing::info!("[Game] Defeat: AI overrun in room {}", room.room_code);
+    }
+}
+
 /// 添加评论
 async fn on_comment_add(socket: SocketRef, Data(data): Data<CommentAddData>) {
     debug!("[Socket.IO] Comment added to item {}", data.item_id);
@@ -744,6 +925,17 @@ fn emit_phase_update(socket: &SocketRef, room: &Room) {
     let _ = socket
         .within(room.room_code.clone())
         .emit("phase:update", &payload);
+}
+
+fn emit_phase_update_with_io(io: &SocketIo, room: &Room) {
+    let payload = PhaseUpdateData {
+        phase: room.status.clone(),
+        room_id: room.room_code.clone(),
+        voting_started_at: room.voting_started_at.map(|t| t.timestamp_millis()),
+        voting_ends_at: room.voting_ends_at.map(|t| t.timestamp_millis()),
+        server_time: Utc::now().timestamp_millis(),
+    };
+    let _ = io.within(room.room_code.clone()).emit("phase:update", &payload);
 }
 
 async fn phase_tick_by_room_code(

@@ -74,6 +74,12 @@ async fn main() -> Result<()> {
         ws::socketio_handler::on_connect.with(ws::socketio_handler::auth_middleware),
     );
 
+    // 后台相位守护：兜底无人操作时的 voting 超时推进
+    tokio::spawn(ws::socketio_handler::start_phase_guard(
+        io.clone(),
+        state.clone(),
+    ));
+
     // CORS 配置
     let cors = CorsLayer::new()
         .allow_origin(Any)
