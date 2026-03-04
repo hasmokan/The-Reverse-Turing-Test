@@ -387,7 +387,7 @@ async fn on_vote_retract(
         .fetch_optional(&state.db)
         .await
     {
-        Ok(Some(d)) => d,
+        Ok(Some(d)) if !d.is_eliminated => d,
         _ => return,
     };
 
