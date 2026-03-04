@@ -72,14 +72,15 @@ pub async fn start_phase_guard(io: SocketIo, state: Arc<AppState>) {
     let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
     loop {
         ticker.tick().await;
-        if let Err(err) = tick_expired_voting_rooms(&io, &state).await {
+        if let Err(err) = tick_phase_guard(&io, &state).await {
             tracing::warn!("[PhaseGuard] tick failed: {}", err);
         }
     }
 }
 
-async fn tick_expired_voting_rooms(io: &SocketIo, state: &AppState) -> Result<(), sqlx::Error> {
-    let rooms: Vec<Room> = sqlx::query_as(
+async fn tick_phase_guard(io: &SocketIo, state: &AppState) -> Result<(), sqlx::Error> {
+    // 1) voting 超时兜底：无人操作也要推进
+    let voting_rooms: Vec<Room> = sqlx::query_as(
         "SELECT * FROM rooms
          WHERE status = 'voting'
            AND voting_ends_at IS NOT NULL
@@ -88,7 +89,7 @@ async fn tick_expired_voting_rooms(io: &SocketIo, state: &AppState) -> Result<()
     .fetch_all(&state.db)
     .await?;
 
-    for room in rooms {
+    for room in voting_rooms {
         check_game_end_with_io(io, state, &room, false).await;
 
         let refreshed: Room = match sqlx::query_as("SELECT * FROM rooms WHERE id = $1")
@@ -113,6 +114,47 @@ async fn tick_expired_voting_rooms(io: &SocketIo, state: &AppState) -> Result<()
         }
 
         emit_phase_update_with_io(io, &final_room);
+    }
+
+    // 2) active 提交期兜底：无人事件也能按提交超时进入 voting
+    let active_rooms: Vec<Room> = sqlx::query_as("SELECT * FROM rooms WHERE status = 'active'")
+        .fetch_all(&state.db)
+        .await?;
+
+    for room in active_rooms {
+        #[derive(sqlx::FromRow)]
+        struct AliveStats {
+            ai_alive: i64,
+            human_alive: i64,
+        }
+
+        let stats: AliveStats = match sqlx::query_as(
+            "SELECT 
+                COUNT(*) FILTER (WHERE is_ai = TRUE AND is_hidden = FALSE AND is_eliminated = FALSE) as ai_alive,
+                COUNT(*) FILTER (WHERE is_ai = FALSE AND is_hidden = FALSE AND is_eliminated = FALSE) as human_alive
+             FROM drawings WHERE room_id = $1",
+        )
+        .bind(room.id)
+        .fetch_one(&state.db)
+        .await
+        {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        let min_humans = state.config.min_humans_to_start_voting.max(1);
+        let submit_deadline =
+            room.created_at + Duration::seconds(state.config.submit_duration_seconds.max(10));
+        let submit_time_up = Utc::now() >= submit_deadline;
+
+        let should_start = (stats.ai_alive >= 1 && stats.human_alive >= min_humans)
+            || (submit_time_up && stats.ai_alive >= 1 && stats.human_alive >= 1);
+
+        if should_start {
+            if let Some(updated) = start_voting(state, room.id).await {
+                emit_phase_update_with_io(io, &updated);
+            }
+        }
     }
 
     Ok(())
