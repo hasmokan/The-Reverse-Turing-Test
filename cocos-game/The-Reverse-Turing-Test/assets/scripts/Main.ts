@@ -54,11 +54,16 @@ export class Main extends Component {
             GameManager.instance.setPlayerId(sessionId);
             ccLog(`[Main] Session ID: ${sessionId}`);
 
-            // 4. 绑定全局事件
+            // 4. 联网自检（REST 基线）
+            if (ONLINE_FEATURES.ENABLED) {
+                await this.runNetworkSelfCheck(sessionId);
+            }
+
+            // 5. 绑定全局事件
             this.bindGlobalEvents();
             this.bindSceneEvents();
 
-            // 5. 如果开启联网且有测试配置，自动连接
+            // 6. 如果开启联网且有测试配置，自动连接
             if (ONLINE_FEATURES.ENABLED && (this.testRoomCode || this.testThemeId)) {
                 await this.autoConnect();
             } else if (!ONLINE_FEATURES.ENABLED) {
@@ -196,6 +201,77 @@ export class Main extends Component {
             }
         }
         return null;
+    }
+
+    /**
+     * 联网自检（启动时）
+     * 流程: health -> guest login -> themes -> room -> room detail -> drawings
+     */
+    private async runNetworkSelfCheck(sessionId: string): Promise<void> {
+        ccLog('[Main][SelfCheck] ===== 网络自检开始 =====');
+
+        try {
+            const health = await APIService.healthCheck();
+            ccLog(`[Main][SelfCheck] 1/6 health: OK (${health.status})`);
+        } catch (error) {
+            ccError('[Main][SelfCheck] 1/6 health: FAILED', error);
+            throw error;
+        }
+
+        try {
+            const auth = await APIService.ensureGuestAuth(sessionId);
+            ccLog(`[Main][SelfCheck] 2/6 guest login: OK (userId=${auth.userId})`);
+        } catch (error) {
+            ccError('[Main][SelfCheck] 2/6 guest login: FAILED', error);
+            throw error;
+        }
+
+        let themeId = this.testThemeId;
+        try {
+            const themes = await APIService.getThemes();
+            ccLog(`[Main][SelfCheck] 3/6 themes: OK (count=${themes.length})`);
+            if (!themeId && themes.length > 0) {
+                themeId = themes[0].themeId;
+                ccLog(`[Main][SelfCheck] fallback themeId=${themeId}`);
+            }
+        } catch (error) {
+            ccError('[Main][SelfCheck] 3/6 themes: FAILED', error);
+            throw error;
+        }
+
+        if (!themeId) {
+            throw new Error('[Main][SelfCheck] No available themeId for room check');
+        }
+
+        let roomCode = this.testRoomCode;
+        try {
+            if (!roomCode) {
+                const room = await APIService.getOrCreateRoom(themeId);
+                roomCode = room.roomCode;
+            }
+            ccLog(`[Main][SelfCheck] 4/6 room: OK (roomCode=${roomCode})`);
+        } catch (error) {
+            ccError('[Main][SelfCheck] 4/6 room: FAILED', error);
+            throw error;
+        }
+
+        try {
+            const roomDetail = await APIService.getRoom(roomCode!);
+            ccLog(`[Main][SelfCheck] 5/6 room detail: OK (status=${roomDetail.room.status})`);
+        } catch (error) {
+            ccError('[Main][SelfCheck] 5/6 room detail: FAILED', error);
+            throw error;
+        }
+
+        try {
+            const drawings = await APIService.getDrawings(roomCode!);
+            ccLog(`[Main][SelfCheck] 6/6 drawings: OK (count=${drawings.length})`);
+        } catch (error) {
+            ccError('[Main][SelfCheck] 6/6 drawings: FAILED', error);
+            throw error;
+        }
+
+        ccLog('[Main][SelfCheck] ===== 网络自检通过 =====');
     }
 
     /**

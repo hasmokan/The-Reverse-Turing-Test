@@ -7,10 +7,10 @@
 
 export const ENV_CONFIG = {
     // 后端 API 地址 (根据实际部署修改)
-    API_URL: 'https://api.hasmodream.ccwu.cc',
+    API_URL: 'https://rutruefish.icu',
 
     // WebSocket 地址
-    WS_URL: 'wss://api.hasmodream.ccwu.cc',
+    WS_URL: 'wss://rutruefish.icu',
 
     // AI 审核 API (阶跃星辰 Vision)
     VISION_API_URL: 'https://api.stepfun.com/v1/chat/completions',
@@ -26,7 +26,7 @@ export const ENV_CONFIG = {
  * - true: 允许联网请求与 socket 连接
  */
 export const ONLINE_FEATURES = {
-    ENABLED: false
+    ENABLED: true
 };
 
 // ==================== 战斗系统常量 ====================
