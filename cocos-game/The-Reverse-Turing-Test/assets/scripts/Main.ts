@@ -35,7 +35,7 @@ export class Main extends Component {
 
     // 测试用的主题 ID
     @property
-    testThemeId: string = 'aquarium';
+    testThemeId: string = 'fish_tank_01';
 
     async start() {
         try {

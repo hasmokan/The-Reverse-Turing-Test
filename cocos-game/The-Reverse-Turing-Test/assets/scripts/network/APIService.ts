@@ -236,11 +236,11 @@ export class APIService {
 
         const storedDeviceToken = this.getStoredDeviceToken();
         const payload: Record<string, string> = {
-            device_token: storedDeviceToken,
+            deviceToken: storedDeviceToken,
         };
 
         if (sessionId) {
-            payload.session_id = sessionId;
+            payload.sessionId = sessionId;
         }
 
         const resp = await this.fetch<GuestLoginResponse>('POST', '/api/auth/guest/login', payload);
@@ -337,14 +337,38 @@ export class APIService {
      * 检查服务器健康状态
      */
     static async healthCheck(): Promise<{ status: string }> {
+        // 1) 优先尝试 root /health（部分部署会暴露）
         try {
-            // 先尝试 JSON 解析
             return await this.fetch<{ status: string }>('GET', '/health');
         } catch (_err) {
-            // 兼容后端返回纯文本 "OK"
+            // ignore
+        }
+
+        try {
             const text = await this.fetch<string>('GET', '/health', undefined, false);
             return { status: (text || '').trim().toLowerCase() || 'ok' };
+        } catch (_err) {
+            // ignore
         }
+
+        // 2) 回退到 /api/health（部分网关只转发 /api）
+        try {
+            return await this.fetch<{ status: string }>('GET', '/api/health');
+        } catch (_err) {
+            // ignore
+        }
+
+        // 3) 最后使用 /api/themes 作为联通探针
+        try {
+            const themes = await this.fetch<any[]>('GET', '/api/themes');
+            if (Array.isArray(themes)) {
+                return { status: 'ok' };
+            }
+        } catch (_err) {
+            // ignore
+        }
+
+        throw new Error('Health check failed: /health, /api/health and /api/themes are all unreachable');
     }
 
     // ==================== AI 图片审核 ====================
