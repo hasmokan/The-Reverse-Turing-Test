@@ -77,6 +77,31 @@ test("MultiPlayerController startGameButton reference is either unset or points 
   assert.ok(buttonNode, "startGameButton should resolve to a valid cc.Node");
 });
 
+test("MultiPlayerController drawMoreButton reference points to DrawMoreButton node", () => {
+  const scene = readScene("assets/scenes/MultiPlayerScene.scene");
+  const controllerNode = scene.find(
+    (item) => item && item.__type__ === "cc.Node" && item._name === "MultiPlayerController",
+  );
+
+  assert.ok(controllerNode, "MultiPlayerController node should exist in MultiPlayerScene");
+  const controllerNodeId = scene.indexOf(controllerNode);
+  const controller = scene.find(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      item.node &&
+      item.node.__id__ === controllerNodeId &&
+      "drawMoreButton" in item,
+  );
+
+  assert.ok(controller, "MultiPlayerController component should exist in MultiPlayerScene");
+  assert.ok(controller.drawMoreButton, "drawMoreButton must not be null");
+
+  const drawMoreNode = resolveNodeRef(scene, controller.drawMoreButton);
+  assert.ok(drawMoreNode, "drawMoreButton should resolve to a valid cc.Node");
+  assert.equal(drawMoreNode._name, "DrawMoreButton");
+});
+
 test("MultiPlayerController onDestroy uses safe unbind helper for node events", () => {
   const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
 
@@ -91,6 +116,25 @@ test("MultiPlayerController onDestroy guards drawingPhaseUI before querying chil
   assert.match(source, /if\s*\(\s*drawingPhaseUiNode\s*&&\s*drawingPhaseUiNode\.isValid\s*\)/);
   assert.match(source, /drawingPhaseUiNode\.getChildByName\('QuickFillButton'\)/);
   assert.match(source, /drawingPhaseUiNode\.getChildByName\('SkipMetaButton'\)/);
+});
+
+test("DrawingBoard onDestroy safely unbinds toolbar button events when button.node is null", () => {
+  const source = fs.readFileSync("assets/scripts/ui/multiplayer/DrawingBoard.ts", "utf-8");
+
+  assert.match(source, /this\.clearButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.clearCanvas,\s*this\)/);
+  assert.match(source, /this\.submitButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.onSubmit,\s*this\)/);
+  assert.match(source, /this\.drawModeButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.setDrawMode,\s*this\)/);
+  assert.match(source, /this\.eraserModeButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.setEraserMode,\s*this\)/);
+  assert.match(source, /this\.colorButtons\.forEach\(\(button\)\s*=>\s*button\?\.node\?\.off\(Button\.EventType\.CLICK\)\)/);
+});
+
+test("DrawingBoard onDestroy safely destroys runtime toolbar assets with strict validity guard", () => {
+  const source = fs.readFileSync("assets/scripts/ui/multiplayer/DrawingBoard.ts", "utf-8");
+
+  assert.match(source, /private safeDestroyRuntimeAsset\(/);
+  assert.match(source, /if\s*\(!isValid\(asset,\s*true\)\)\s*return/);
+  assert.match(source, /this\.safeDestroyRuntimeAsset\(frame\)/);
+  assert.match(source, /this\.safeDestroyRuntimeAsset\(texture\)/);
 });
 
 test("MultiPlayerController dedupes drawing commits by commit token", () => {

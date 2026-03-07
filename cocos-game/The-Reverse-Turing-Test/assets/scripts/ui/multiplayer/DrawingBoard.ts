@@ -19,6 +19,7 @@ import {
     assetManager,
     ImageAsset,
     Texture2D,
+    isValid,
     log as ccLog,
     error as ccError,
     warn as ccWarn,
@@ -149,11 +150,23 @@ export class DrawingBoard extends Component {
         this.unbindCanvasEvents();
         this.unbindToolbarEvents();
         this.toolbarSpriteFrames.forEach((frame) => {
-            if (frame?.isValid) frame.destroy();
+            this.safeDestroyRuntimeAsset(frame);
         });
         this.toolbarTextures.forEach((texture) => {
-            if (texture?.isValid) texture.destroy();
+            this.safeDestroyRuntimeAsset(texture);
         });
+        this.toolbarSpriteFrames.length = 0;
+        this.toolbarTextures.length = 0;
+    }
+
+    private safeDestroyRuntimeAsset(asset: { destroy: () => boolean } | null | undefined): void {
+        if (!asset) return;
+        if (!isValid(asset, true)) return;
+        try {
+            asset.destroy();
+        } catch (error) {
+            ccWarn('[DrawingBoard] 运行时资源重复销毁，已忽略', error);
+        }
     }
 
     private ensureGraphicsTarget(): void {
@@ -361,11 +374,11 @@ export class DrawingBoard extends Component {
     }
 
     private unbindToolbarEvents(): void {
-        this.clearButton?.node.off(Button.EventType.CLICK, this.clearCanvas, this);
-        this.submitButton?.node.off(Button.EventType.CLICK, this.onSubmit, this);
-        this.drawModeButton?.node.off(Button.EventType.CLICK, this.setDrawMode, this);
-        this.eraserModeButton?.node.off(Button.EventType.CLICK, this.setEraserMode, this);
-        this.colorButtons.forEach((button) => button?.node.off(Button.EventType.CLICK));
+        this.clearButton?.node?.off(Button.EventType.CLICK, this.clearCanvas, this);
+        this.submitButton?.node?.off(Button.EventType.CLICK, this.onSubmit, this);
+        this.drawModeButton?.node?.off(Button.EventType.CLICK, this.setDrawMode, this);
+        this.eraserModeButton?.node?.off(Button.EventType.CLICK, this.setEraserMode, this);
+        this.colorButtons.forEach((button) => button?.node?.off(Button.EventType.CLICK));
     }
 
     private applyToolbarIcons(): void {
