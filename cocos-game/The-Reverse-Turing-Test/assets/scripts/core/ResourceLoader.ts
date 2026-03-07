@@ -1,4 +1,22 @@
-import { _decorator, Component, assetManager, ImageAsset, SpriteFrame, Texture2D, AssetManager, Node, Sprite, Color, error, log, warn, sys } from 'cc';
+import {
+    _decorator,
+    Component,
+    assetManager,
+    ImageAsset,
+    SpriteFrame,
+    Texture2D,
+    AssetManager,
+    Node,
+    Sprite,
+    Color,
+    error,
+    log,
+    warn,
+    sys,
+    Rect,
+    Size,
+    Vec2,
+} from 'cc';
 import { ResourceConfig, RemoteResource } from './ResourceConfig';
 
 const { ccclass } = _decorator;
@@ -386,6 +404,111 @@ export class ResourceLoader extends Component {
         return this._cache?.has(key) || false;
     }
 
+    private getTemplateRect(frame: SpriteFrame): Rect | null {
+        const anyFrame = frame as any;
+        const raw = anyFrame.rect ?? anyFrame.getRect?.();
+        if (!raw || typeof raw.x !== 'number' || typeof raw.y !== 'number') {
+            return null;
+        }
+        if (typeof raw.width !== 'number' || typeof raw.height !== 'number') {
+            return null;
+        }
+        return new Rect(raw.x, raw.y, raw.width, raw.height);
+    }
+
+    private getTemplateOriginalSize(frame: SpriteFrame): Size | null {
+        const anyFrame = frame as any;
+        const raw = anyFrame.originalSize ?? anyFrame.getOriginalSize?.();
+        if (!raw || typeof raw.width !== 'number' || typeof raw.height !== 'number') {
+            return null;
+        }
+        return new Size(raw.width, raw.height);
+    }
+
+    private getTemplateOffset(frame: SpriteFrame): Vec2 | null {
+        const anyFrame = frame as any;
+        const raw = anyFrame.offset ?? anyFrame.getOffset?.();
+        if (!raw || typeof raw.x !== 'number' || typeof raw.y !== 'number') {
+            return null;
+        }
+        return new Vec2(raw.x, raw.y);
+    }
+
+    private isTemplateGeometryCompatible(templateFrame: SpriteFrame, texture: Texture2D): boolean {
+        const rect = this.getTemplateRect(templateFrame);
+        if (!rect) {
+            return true;
+        }
+
+        const textureWidth = texture.width;
+        const textureHeight = texture.height;
+        const maxX = rect.x + rect.width;
+        const maxY = rect.y + rect.height;
+        return rect.x >= 0 && rect.y >= 0 && maxX <= textureWidth && maxY <= textureHeight;
+    }
+
+    private buildSpriteFrameWithTemplateGeometry(
+        remoteSpriteFrame: SpriteFrame,
+        templateFrame: SpriteFrame,
+        key: string,
+        nodeName: string,
+    ): SpriteFrame | null {
+        const texture = remoteSpriteFrame.texture;
+        if (!texture) {
+            return null;
+        }
+
+        if (!this.isTemplateGeometryCompatible(templateFrame, texture)) {
+            warn(`[ResourceLoader] 纹理尺寸与模板几何不兼容，回退直贴: key=${key}, node=${nodeName}`);
+            return null;
+        }
+
+        const composed = new SpriteFrame();
+        composed.texture = texture;
+
+        const rect = this.getTemplateRect(templateFrame);
+        if (rect) {
+            (composed as any).setRect?.(rect);
+            if (!(composed as any).setRect) {
+                (composed as any).rect = rect;
+            }
+        }
+
+        const originalSize = this.getTemplateOriginalSize(templateFrame);
+        if (originalSize) {
+            (composed as any).setOriginalSize?.(originalSize);
+            if (!(composed as any).setOriginalSize) {
+                (composed as any).originalSize = originalSize;
+            }
+        }
+
+        const offset = this.getTemplateOffset(templateFrame);
+        if (offset) {
+            (composed as any).setOffset?.(offset);
+            if (!(composed as any).setOffset) {
+                (composed as any).offset = offset;
+            }
+        }
+
+        const templateAny = templateFrame as any;
+        const rotated = templateAny.rotated ?? templateAny.isRotated?.();
+        if (typeof rotated === 'boolean') {
+            (composed as any).setRotated?.(rotated);
+            if (!(composed as any).setRotated) {
+                (composed as any).rotated = rotated;
+            }
+        }
+
+        for (const insetKey of ['insetTop', 'insetBottom', 'insetLeft', 'insetRight']) {
+            const insetValue = templateAny[insetKey];
+            if (typeof insetValue === 'number') {
+                (composed as any)[insetKey] = insetValue;
+            }
+        }
+
+        return composed;
+    }
+
     /**
      * 按 ResourceConfig.NODE_MAPPING 将已加载资源应用到指定节点树
      */
@@ -417,7 +540,11 @@ export class ResourceLoader extends Component {
             if (backgroundManager?.changeBackground) {
                 backgroundManager.changeBackground(spriteFrame);
             } else {
-                sprite.spriteFrame = spriteFrame;
+                const templateFrame = sprite.spriteFrame;
+                const finalFrame = templateFrame
+                    ? (this.buildSpriteFrameWithTemplateGeometry(spriteFrame, templateFrame, key, nodeName) || spriteFrame)
+                    : spriteFrame;
+                sprite.spriteFrame = finalFrame;
             }
 
             sprite.color = Color.WHITE;

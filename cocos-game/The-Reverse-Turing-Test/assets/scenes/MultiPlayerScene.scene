@@ -4824,7 +4824,9 @@
     "descInputNode": null,
     "submitButton": null,
     "startGameButton": null,
-    "drawMoreButton": null,
+    "drawMoreButton": {
+      "__id__": 21
+    },
     "backButton": null,
     "killFeedNode": {
       "__id__": 80
