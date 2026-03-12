@@ -95,7 +95,7 @@ export interface GameResult {
     aiRemaining: number;
     humanRemaining: number;
     humanKilled?: number;
-    reason?: 'ai_majority' | 'too_many_human_killed';
+    reason?: 'ai_majority' | 'ai_overrun' | 'too_many_human_killed';
 }
 
 // ==================== 淘汰动画 ====================
@@ -112,17 +112,14 @@ export interface EliminationData {
 
 export interface VoteCastData {
     fishId: string;
-    voterId: string;
 }
 
 export interface VoteRetractData {
     fishId: string;
-    voterId: string;
 }
 
 export interface VoteChaseData {
     fishId: string;
-    voterId: string;
 }
 
 export interface VoteUpdateData {
@@ -182,7 +179,10 @@ export interface SyncStateResponse {
     totalItems: number;
     aiCount: number;
     turbidity: number;
-    theme: ThemeConfig;
+    votingStartedAt?: number;
+    votingEndsAt?: number;
+    serverTime?: number;
+    theme: any;
     items: BackendGameItem[];
 }
 

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, ProgressBar, tween, Vec3, UIOpacity } from 'cc';
+import { _decorator, Component, Node, Label, ProgressBar, tween, UIOpacity, UITransform, Graphics, view, Color } from 'cc';
 
 const { ccclass, property } = _decorator;
 
@@ -20,11 +20,21 @@ export class LoadingScreen extends Component {
     @property(Node)
     loadingNode: Node = null!;
 
+    @property(Color)
+    backdropColor: Color = new Color(14, 24, 35, 255);
+
     private _loadingComplete = false;
+    private _backdrop: Node | null = null;
 
     onLoad() {
+        const host = this.node;
+        if (!host || !host.isValid) {
+            return;
+        }
         // 确保加载屏幕初始可见
-        this.node.active = true;
+        host.active = true;
+        this.ensureBackdrop();
+        this.refreshBackdrop();
 
         // 初始化进度
         if (this.progressBar) {
@@ -39,6 +49,15 @@ export class LoadingScreen extends Component {
 
         // 启动加载图标旋转动画
         this.startLoadingAnimation();
+    }
+
+    onEnable(): void {
+        view.on('canvas-resize', this.onCanvasResize, this);
+        this.refreshBackdrop();
+    }
+
+    onDisable(): void {
+        view.off('canvas-resize', this.onCanvasResize, this);
     }
 
     /**
@@ -92,6 +111,13 @@ export class LoadingScreen extends Component {
 
         // 延迟淡出
         this.scheduleOnce(() => {
+            const host = this.node;
+            if (!this.isValid || !host || !host.isValid) {
+                if (onComplete) {
+                    onComplete();
+                }
+                return;
+            }
             this.fadeOut(() => {
                 if (onComplete) {
                     onComplete();
@@ -117,7 +143,7 @@ export class LoadingScreen extends Component {
      * 启动加载动画（旋转）
      */
     private startLoadingAnimation(): void {
-        if (!this.loadingNode) return;
+        if (!this.loadingNode || !this.loadingNode.isValid) return;
 
         // 持续旋转动画
         tween(this.loadingNode)
@@ -132,7 +158,7 @@ export class LoadingScreen extends Component {
      * 停止加载动画
      */
     private stopLoadingAnimation(): void {
-        if (!this.loadingNode) return;
+        if (!this.loadingNode || !this.loadingNode.isValid) return;
 
         tween(this.loadingNode).stop();
     }
@@ -141,10 +167,20 @@ export class LoadingScreen extends Component {
      * 淡出加载屏幕
      */
     private fadeOut(onComplete?: () => void): void {
-        const opacity = this.node.getComponent(UIOpacity);
+        const host = this.node;
+        if (!host || !host.isValid) {
+            if (onComplete) {
+                onComplete();
+            }
+            return;
+        }
+
+        const opacity = host.getComponent(UIOpacity);
         if (!opacity) {
             // 如果没有 UIOpacity 组件，直接隐藏
-            this.node.active = false;
+            if (host.isValid) {
+                host.active = false;
+            }
             if (onComplete) {
                 onComplete();
             }
@@ -155,7 +191,9 @@ export class LoadingScreen extends Component {
         tween(opacity)
             .to(0.5, { opacity: 0 })
             .call(() => {
-                this.node.active = false;
+                if (host && host.isValid) {
+                    host.active = false;
+                }
                 if (onComplete) {
                     onComplete();
                 }
@@ -167,10 +205,16 @@ export class LoadingScreen extends Component {
      * 显示加载屏幕
      */
     public show(): void {
+        const host = this.node;
+        if (!host || !host.isValid) {
+            return;
+        }
         this._loadingComplete = false;
-        this.node.active = true;
+        host.active = true;
+        this.ensureBackdrop();
+        this.refreshBackdrop();
 
-        const opacity = this.node.getComponent(UIOpacity);
+        const opacity = host.getComponent(UIOpacity);
         if (opacity) {
             opacity.opacity = 255;
         }
@@ -194,14 +238,78 @@ export class LoadingScreen extends Component {
      * 隐藏加载屏幕
      */
     public hide(immediate: boolean = false): void {
+        const host = this.node;
+        if (!host || !host.isValid) {
+            return;
+        }
         if (immediate) {
-            this.node.active = false;
+            host.active = false;
         } else {
             this.fadeOut();
         }
     }
 
     onDestroy(): void {
+        this.unscheduleAllCallbacks();
         this.stopLoadingAnimation();
+        this._backdrop = null;
+    }
+
+    private ensureBackdrop(): void {
+        const host = this.node;
+        if (!host || !host.isValid) {
+            return;
+        }
+
+        if (this._backdrop && this._backdrop.isValid) {
+            this._backdrop.setSiblingIndex(0);
+            return;
+        }
+
+        const existing = host.getChildByName('_LoadingBackdrop');
+        const backdrop = (existing && existing.isValid) ? existing : new Node('_LoadingBackdrop');
+
+        if (!existing) {
+            host.insertChild(backdrop, 0);
+        }
+
+        backdrop.layer = host.layer;
+        backdrop.setSiblingIndex(0);
+        if (!backdrop.getComponent(UITransform)) {
+            backdrop.addComponent(UITransform);
+        }
+        if (!backdrop.getComponent(Graphics)) {
+            backdrop.addComponent(Graphics);
+        }
+        this._backdrop = backdrop;
+    }
+
+    private refreshBackdrop(): void {
+        const host = this.node;
+        if (!host || !host.isValid) {
+            return;
+        }
+
+        this.ensureBackdrop();
+        if (!this._backdrop || !this._backdrop.isValid) {
+            return;
+        }
+
+        const visibleSize = view.getVisibleSize();
+        const hostTransform = host.getComponent(UITransform) || host.addComponent(UITransform);
+        hostTransform.setContentSize(visibleSize.width, visibleSize.height);
+
+        const backdropTransform = this._backdrop.getComponent(UITransform)!;
+        backdropTransform.setContentSize(visibleSize.width, visibleSize.height);
+
+        const graphics = this._backdrop.getComponent(Graphics)!;
+        graphics.clear();
+        graphics.fillColor = this.backdropColor;
+        graphics.rect(-visibleSize.width * 0.5, -visibleSize.height * 0.5, visibleSize.width, visibleSize.height);
+        graphics.fill();
+    }
+
+    private onCanvasResize(): void {
+        this.refreshBackdrop();
     }
 }

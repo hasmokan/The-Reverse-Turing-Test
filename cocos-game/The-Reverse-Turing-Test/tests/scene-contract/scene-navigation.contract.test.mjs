@@ -121,11 +121,13 @@ test("MultiPlayerController onDestroy guards drawingPhaseUI before querying chil
 test("DrawingBoard onDestroy safely unbinds toolbar button events when button.node is null", () => {
   const source = fs.readFileSync("assets/scripts/ui/multiplayer/DrawingBoard.ts", "utf-8");
 
-  assert.match(source, /this\.clearButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.clearCanvas,\s*this\)/);
-  assert.match(source, /this\.submitButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.onSubmit,\s*this\)/);
-  assert.match(source, /this\.drawModeButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.setDrawMode,\s*this\)/);
-  assert.match(source, /this\.eraserModeButton\?\.node\?\.off\(Button\.EventType\.CLICK,\s*this\.setEraserMode,\s*this\)/);
-  assert.match(source, /this\.colorButtons\.forEach\(\(button\)\s*=>\s*button\?\.node\?\.off\(Button\.EventType\.CLICK\)\)/);
+  assert.match(source, /private safeOffNodeClick\(/);
+  assert.match(source, /if\s*\(!node\s*\|\|\s*!isValid\(node,\s*true\)\)\s*return/);
+  assert.match(source, /this\.safeOffNodeClick\(this\.clearButton\?\.node,\s*this\.clearCanvas\)/);
+  assert.match(source, /this\.safeOffNodeClick\(this\.submitButton\?\.node,\s*this\.onSubmit\)/);
+  assert.match(source, /this\.safeOffNodeClick\(this\.drawModeButton\?\.node,\s*this\.setDrawMode\)/);
+  assert.match(source, /this\.safeOffNodeClick\(this\.eraserModeButton\?\.node,\s*this\.setEraserMode\)/);
+  assert.match(source, /this\.colorButtons\.forEach\(\(button\)\s*=>\s*this\.safeOffNodeClick\(button\?\.node\)\)/);
 });
 
 test("DrawingBoard onDestroy safely destroys runtime toolbar assets with strict validity guard", () => {
@@ -135,6 +137,16 @@ test("DrawingBoard onDestroy safely destroys runtime toolbar assets with strict 
   assert.match(source, /if\s*\(!isValid\(asset,\s*true\)\)\s*return/);
   assert.match(source, /this\.safeDestroyRuntimeAsset\(frame\)/);
   assert.match(source, /this\.safeDestroyRuntimeAsset\(texture\)/);
+});
+
+test("DrawingBoard capture renders into RenderTexture before restoring camera target", () => {
+  const source = fs.readFileSync("assets/scripts/ui/multiplayer/DrawingBoard.ts", "utf-8");
+
+  assert.match(source, /this\.camera\.targetTexture = renderTexture/);
+  assert.match(source, /const cameraAny = this\.camera as unknown as \{ render\?: \(\) => void \}/);
+  assert.match(source, /if \(typeof cameraAny\.render === 'function'\)/);
+  assert.match(source, /cameraAny\.render\(\)/);
+  assert.match(source, /this\.camera\.targetTexture = originalTarget/);
 });
 
 test("MultiPlayerController dedupes drawing commits by commit token", () => {
@@ -163,6 +175,29 @@ test("MultiPlayerController draw panel toggle also manages draw tool buttons", (
   assert.match(source, /pushUniqueNode\(drawingBoardComp\?\.eraserModeButton\?\.node\)/);
 });
 
+test("MultiPlayerController clears stale viewing timer before phase transitions", () => {
+  const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
+
+  assert.match(source, /private readonly _enterVotingFromViewing = \(\): void =>/);
+  assert.match(source, /this\.unschedule\(this\._enterVotingFromViewing\)/);
+  assert.match(source, /this\.scheduleOnce\(this\._enterVotingFromViewing,\s*2\.4\)/);
+});
+
+test("MultiPlayerController auto-enters fish tank after first successful save", () => {
+  const source = fs.readFileSync("assets/scripts/game/MultiPlayerController.ts", "utf-8");
+
+  assert.match(source, /if \(!this\._hasGameStarted\)/);
+  assert.match(source, /this\._hasGameStarted = true/);
+  assert.match(source, /this\.setPhase\(MultiPlayerPhase\.VIEWING\)/);
+  assert.match(source, /gm\.showToast\(ToastType\.INFO,\s*'已加入鱼缸'\)/);
+  assert.match(source, /this\.ensureFishVisibleInTank\(fishId\)/);
+  assert.match(source, /if \(this\._isDrawingFromGamePhase\)/);
+  assert.match(source, /this\.setDrawPanelVisible\(false,\s*true\);\s*this\.setPhase\(MultiPlayerPhase\.VIEWING\)/s);
+  assert.match(source, /private ensureFishVisibleInTank\(/);
+  assert.match(source, /private findGameStageComponent\(/);
+  assert.match(source, /stage\.initExistingItems\(\)/);
+});
+
 test("SceneTransition lazily ensures runtime instance", () => {
   const source = fs.readFileSync("assets/scripts/core/SceneTransition.ts", "utf-8");
 
@@ -177,4 +212,44 @@ test("Scene navigation handlers fallback to direct scene load when transition mi
 
   assert.match(sceneSwitcher, /director\.loadScene\(/);
   assert.match(menuButton, /director\.loadScene\(/);
+});
+
+test("MenuButtonHandler preloads remote UI with progress before entering MultiPlayerScene", () => {
+  const menuButton = fs.readFileSync("assets/scripts/ui/main-menu/MenuButtonHandler.ts", "utf-8");
+
+  assert.match(menuButton, /private async preloadThenLoadScene\(/);
+  assert.match(menuButton, /if \(sceneName !== 'MultiPlayerScene'\)/);
+  assert.match(menuButton, /loader\.preloadResources\(/);
+  assert.match(menuButton, /loadingScreen\??\.updateProgress\(loaded,\s*total,\s*currentItem\)/);
+  assert.match(menuButton, /this\.loadSceneWithFallback\(sceneName,\s*type,\s*duration\)/);
+});
+
+test("LoadingScreen renders a fullscreen backdrop to avoid startup blank frames", () => {
+  const loadingScreen = fs.readFileSync("assets/scripts/ui/common/LoadingScreen.ts", "utf-8");
+
+  assert.match(loadingScreen, /private ensureBackdrop\(\): void/);
+  assert.match(loadingScreen, /new Node\('_LoadingBackdrop'\)/);
+  assert.match(loadingScreen, /addComponent\(Graphics\)/);
+  assert.match(loadingScreen, /view\.getVisibleSize\(\)/);
+  assert.match(loadingScreen, /canvas-resize/);
+  assert.match(loadingScreen, /const host = this\.node;/);
+  assert.match(loadingScreen, /if \(!host \|\| !host\.isValid\)/);
+});
+
+test("FishController retries local sprite binding for newly submitted drawings", () => {
+  const fishController = fs.readFileSync("assets/scripts/game/FishController.ts", "utf-8");
+
+  assert.match(fishController, /private applyLocalSpriteFrameWithRetry\(/);
+  assert.match(fishController, /this\.fishSprite = this\.node\.getComponent\(Sprite\) \|\| this\.node\.addComponent\(Sprite\)/);
+  assert.match(fishController, /this\.applyLocalSpriteFrameWithRetry\(fishId\)/);
+  assert.match(fishController, /this\.scheduleOnce\(\(\) => \{\s*this\.applyLocalSpriteFrameWithRetry\(fishId,\s*retries - 1\)/);
+});
+
+test("FishDetailPanel fallback progress bar avoids FILLED mode without spriteFrame", () => {
+  const fishDetail = fs.readFileSync("assets/scripts/ui/multiplayer/FishDetailPanel.ts", "utf-8");
+
+  assert.match(fishDetail, /fillSprite\.type = Sprite\.Type\.SIMPLE/);
+  assert.match(fishDetail, /fillNode\.setScale\(0,\s*1,\s*1\)/);
+  assert.match(fishDetail, /if \(this\.voteProgressFill\.type === Sprite\.Type\.FILLED\)/);
+  assert.match(fishDetail, /fillNode\.setScale\(progress,\s*1,\s*1\)/);
 });

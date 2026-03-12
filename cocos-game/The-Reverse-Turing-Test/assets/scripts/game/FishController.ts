@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Sprite, SpriteFrame, UITransform,
          Vec3, tween, Tween, assetManager, Texture2D, ImageAsset,
  error as ccError,
+ warn as ccWarn,
 } from 'cc';
 import { GameManager } from '../core/GameManager';
 import { GameItem, ToastType } from '../data/GameTypes';
@@ -85,10 +86,7 @@ export class FishController extends Component {
 
         if (imageUrl.startsWith('local-sprite://')) {
             const fishId = imageUrl.replace('local-sprite://', '');
-            const localSpriteFrame = GameManager.instance.getLocalFishSpriteFrame(fishId);
-            if (localSpriteFrame && this.fishSprite) {
-                this.fishSprite.spriteFrame = localSpriteFrame;
-            }
+            this.applyLocalSpriteFrameWithRetry(fishId);
             return;
         }
 
@@ -98,6 +96,27 @@ export class FishController extends Component {
         } else if (imageUrl.startsWith('http')) {
             this.loadRemoteImage(imageUrl);
         }
+    }
+
+    private applyLocalSpriteFrameWithRetry(fishId: string, retries: number = 8): void {
+        if (!this.fishSprite || !this.fishSprite.isValid) {
+            this.fishSprite = this.node.getComponent(Sprite) || this.node.addComponent(Sprite);
+        }
+
+        const localSpriteFrame = GameManager.instance.getLocalFishSpriteFrame(fishId);
+        if (localSpriteFrame && this.fishSprite) {
+            this.fishSprite.spriteFrame = localSpriteFrame;
+            return;
+        }
+
+        if (retries <= 0) {
+            ccWarn(`[FishController] 本地鱼纹理未命中: ${fishId}`);
+            return;
+        }
+
+        this.scheduleOnce(() => {
+            this.applyLocalSpriteFrameWithRetry(fishId, retries - 1);
+        }, 0.06);
     }
 
     /**
@@ -311,6 +330,7 @@ export class FishController extends Component {
     // ==================== 生命周期 ====================
 
     onDestroy(): void {
+        this.unscheduleAllCallbacks();
         if (this._floatTween) {
             this._floatTween.stop();
         }

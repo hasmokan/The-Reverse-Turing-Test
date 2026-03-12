@@ -255,6 +255,14 @@ export class SocketClient extends Component {
             this.handleSyncState(data);
         });
 
+        this._socket.on('phase:update', (data: { phase: string; roomId: string }) => {
+            const gm = GameManager.instance;
+            gm.syncState({
+                phase: data.phase,
+                roomId: data.roomId,
+            });
+        });
+
         this._socket.on('item:add', (data: any) => {
             GameManager.instance.addItem(DataConverter.convertBackendItem(data));
         });
@@ -273,6 +281,19 @@ export class SocketClient extends Component {
                 gm.setBeingAttacked();
                 gm.showToast(ToastType.WARNING, '⚠️ 有人正在怀疑你');
             }
+        });
+
+        this._socket.on('vote:error', (data: { reason?: string }) => {
+            const gm = GameManager.instance;
+            if (data?.reason === 'not_voting') {
+                gm.showToast(ToastType.INFO, '当前不在投票阶段');
+                return;
+            }
+            if (data?.reason === 'chase_disabled') {
+                gm.showToast(ToastType.INFO, '追击技能暂未开放');
+                return;
+            }
+            gm.showToast(ToastType.WARNING, '投票操作未生效');
         });
 
         this._socket.on('fish:eliminate', (data: FishEliminateData) => {
@@ -364,24 +385,15 @@ export class SocketClient extends Component {
     // ==================== 战斗系统操作 ====================
 
     castVote(fishId: string): void {
-        const gm = GameManager.instance;
-        if (!gm.playerId) {
-            ccWarn('[SocketClient] Player ID not set');
-            return;
-        }
-        this.emit('vote:cast', { fishId, voterId: gm.playerId });
+        this.emit('vote:cast', { fishId });
     }
 
     retractVote(fishId: string): void {
-        const gm = GameManager.instance;
-        if (!gm.playerId) return;
-        this.emit('vote:retract', { fishId, voterId: gm.playerId });
+        this.emit('vote:retract', { fishId });
     }
 
     chaseVote(fishId: string): void {
-        const gm = GameManager.instance;
-        if (!gm.playerId) return;
-        this.emit('vote:chase', { fishId, voterId: gm.playerId });
+        this.emit('vote:chase', { fishId });
     }
 
     addComment(itemId: string, author: string, content: string): void {

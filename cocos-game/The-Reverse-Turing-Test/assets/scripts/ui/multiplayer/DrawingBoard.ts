@@ -90,6 +90,8 @@ export class DrawingBoard extends Component {
     private lastSubmitSignature: string | null = null;
     private toolbarTextures: Texture2D[] = [];
     private toolbarSpriteFrames: SpriteFrame[] = [];
+    private canvasEventsBound: boolean = false;
+    private toolbarEventsBound: boolean = false;
 
     private static readonly FRONTEND_BRUSH_COLORS: ReadonlyArray<Color> =
         FRONTEND_BRUSH_COLOR_HEXES.map((hex) => DrawingBoard.hexToColor(hex));
@@ -343,21 +345,35 @@ export class DrawingBoard extends Component {
     }
 
     private bindCanvasEvents(): void {
+        if (this.canvasEventsBound) return;
+        if (!this.drawingCanvas?.isValid) return;
         this.drawingCanvas.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
         this.drawingCanvas.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.drawingCanvas.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
         this.drawingCanvas.on(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        this.canvasEventsBound = true;
     }
 
     private unbindCanvasEvents(): void {
-        if (!this.drawingCanvas?.isValid) return;
-        this.drawingCanvas.off(Input.EventType.TOUCH_START, this.onTouchStart, this);
-        this.drawingCanvas.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
-        this.drawingCanvas.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
-        this.drawingCanvas.off(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        if (!this.canvasEventsBound) return;
+        if (!this.drawingCanvas?.isValid) {
+            this.canvasEventsBound = false;
+            return;
+        }
+        try {
+            this.drawingCanvas.off(Input.EventType.TOUCH_START, this.onTouchStart, this);
+            this.drawingCanvas.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
+            this.drawingCanvas.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+            this.drawingCanvas.off(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        } catch (error) {
+            ccWarn('[DrawingBoard] 画布事件重复解绑，已忽略', error);
+        } finally {
+            this.canvasEventsBound = false;
+        }
     }
 
     private bindToolbarEvents(): void {
+        if (this.toolbarEventsBound) return;
         this.clearButton?.node.on(Button.EventType.CLICK, this.clearCanvas, this);
         this.submitButton?.node.on(Button.EventType.CLICK, this.onSubmit, this);
         this.drawModeButton?.node.on(Button.EventType.CLICK, this.setDrawMode, this);
@@ -371,14 +387,30 @@ export class DrawingBoard extends Component {
                 this.refreshModeButtonState();
             }, this);
         });
+        this.toolbarEventsBound = true;
     }
 
     private unbindToolbarEvents(): void {
-        this.clearButton?.node?.off(Button.EventType.CLICK, this.clearCanvas, this);
-        this.submitButton?.node?.off(Button.EventType.CLICK, this.onSubmit, this);
-        this.drawModeButton?.node?.off(Button.EventType.CLICK, this.setDrawMode, this);
-        this.eraserModeButton?.node?.off(Button.EventType.CLICK, this.setEraserMode, this);
-        this.colorButtons.forEach((button) => button?.node?.off(Button.EventType.CLICK));
+        if (!this.toolbarEventsBound) return;
+        this.safeOffNodeClick(this.clearButton?.node, this.clearCanvas);
+        this.safeOffNodeClick(this.submitButton?.node, this.onSubmit);
+        this.safeOffNodeClick(this.drawModeButton?.node, this.setDrawMode);
+        this.safeOffNodeClick(this.eraserModeButton?.node, this.setEraserMode);
+        this.colorButtons.forEach((button) => this.safeOffNodeClick(button?.node));
+        this.toolbarEventsBound = false;
+    }
+
+    private safeOffNodeClick(node: Node | null | undefined, handler?: (...args: any[]) => void): void {
+        if (!node || !isValid(node, true)) return;
+        try {
+            if (handler) {
+                node.off(Button.EventType.CLICK, handler, this);
+                return;
+            }
+            node.off(Button.EventType.CLICK);
+        } catch (error) {
+            ccWarn('[DrawingBoard] 按钮事件重复解绑，已忽略', error);
+        }
     }
 
     private applyToolbarIcons(): void {
@@ -607,13 +639,25 @@ export class DrawingBoard extends Component {
                 height: height,
             });
 
-            const originalTarget = this.camera ? this.camera.targetTexture : null;
-            if (this.camera) {
-                this.camera.targetTexture = renderTexture;
+            if (!this.camera || !this.camera.isValid) {
+                ccWarn('[DrawingBoard] 相机未就绪，无法捕获画布');
+                return null;
+            }
+
+            const originalTarget = this.camera.targetTexture;
+            this.camera.targetTexture = renderTexture;
+
+            // 必须在切换到 RenderTexture 后主动渲染一帧，否则可能得到空纹理。
+            const cameraAny = this.camera as unknown as { render?: () => void };
+            if (typeof cameraAny.render === 'function') {
+                cameraAny.render();
+            } else {
+                // 兼容少数运行环境，保留旧的激活触发路径。
                 this.camera.node.active = false;
                 this.camera.node.active = true;
-                this.camera.targetTexture = originalTarget;
             }
+
+            this.camera.targetTexture = originalTarget;
 
             const spriteFrame = new SpriteFrame();
             spriteFrame.texture = renderTexture;

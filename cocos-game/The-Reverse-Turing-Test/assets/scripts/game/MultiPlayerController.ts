@@ -129,6 +129,10 @@ export class MultiPlayerController extends Component {
     private _loadingProgressBar: ProgressBar | null = null;
     private _loadingDuration: number = 0;
     private _loadingElapsed: number = 0;
+    private readonly _enterVotingFromViewing = (): void => {
+        this.hideLoadingOverlay();
+        this.setPhase(MultiPlayerPhase.VOTING);
+    };
 
     // ==================== 生命周期 ====================
 
@@ -434,6 +438,8 @@ export class MultiPlayerController extends Component {
     // ==================== 阶段管理 ====================
 
     private setPhase(phase: MultiPlayerPhase): void {
+        // 任何阶段切换都先清理可能遗留的 VIEWING->VOTING 延时任务，避免覆盖当前阶段。
+        this.unschedule(this._enterVotingFromViewing);
         this._phase = phase;
         const gm = GameManager.instance;
 
@@ -454,10 +460,7 @@ export class MultiPlayerController extends Component {
 
                 // 审核/同步加载态（基础UI版）
                 this.showLoadingOverlay(2.4);
-                this.scheduleOnce(() => {
-                    this.hideLoadingOverlay();
-                    this.setPhase(MultiPlayerPhase.VOTING);
-                }, 2.4);
+                this.scheduleOnce(this._enterVotingFromViewing, 2.4);
                 break;
 
             case MultiPlayerPhase.VOTING:
@@ -478,7 +481,13 @@ export class MultiPlayerController extends Component {
     // ==================== 画板事件 ====================
 
     private onDrawingCompleted(spriteFrame: SpriteFrame, commitToken?: string): void {
-        if (this._phase !== MultiPlayerPhase.DRAWING) return;
+        if (this._phase !== MultiPlayerPhase.DRAWING) {
+            // 兼容阶段竞态：面板仍可见时，允许提交并继续入池。
+            if (!this._isDrawPanelVisible) {
+                return;
+            }
+            this.setPhase(MultiPlayerPhase.DRAWING);
+        }
 
         const gm = GameManager.instance;
         if (!gm) return;
@@ -543,12 +552,23 @@ export class MultiPlayerController extends Component {
 
         this._ownedFishIds.add(fishId);
         this._playerFishCount = this._ownedFishIds.size;
+        this.ensureFishVisibleInTank(fishId);
 
         if (this._aiSpawner) {
             this._aiSpawner.onHumanFishCreated();
         }
 
         gm.showToast(ToastType.SUCCESS, '投放成功！');
+
+        // 首次提交后统一自动进入鱼缸，避免“保存成功但仍停留在画板看不到入池”。
+        if (!this._hasGameStarted) {
+            this._hasGameStarted = true;
+            this._isDrawingFromGamePhase = false;
+            this.setDrawPanelVisible(false, true);
+            this.setPhase(MultiPlayerPhase.VIEWING);
+            gm.showToast(ToastType.INFO, '已加入鱼缸');
+            return;
+        }
 
         const startGameButtonNode = this.resolveButtonNode(this.startGameButton, 'startGameButton');
         if (startGameButtonNode) {
@@ -559,7 +579,8 @@ export class MultiPlayerController extends Component {
 
         if (this._isDrawingFromGamePhase) {
             this._isDrawingFromGamePhase = false;
-            this.setPhase(MultiPlayerPhase.VOTING);
+            this.setDrawPanelVisible(false, true);
+            this.setPhase(MultiPlayerPhase.VIEWING);
             return;
         }
 
@@ -879,6 +900,94 @@ export class MultiPlayerController extends Component {
         if (bg) {
             bg.color = available ? new Color(249, 137, 74, 255) : new Color(130, 130, 130, 255);
         }
+    }
+
+    private ensureFishVisibleInTank(fishId: string, retries: number = 12): void {
+        const gm = GameManager.instance;
+        if (!gm) return;
+
+        const run = (remaining: number): void => {
+            if (!this.node || !this.node.isValid) return;
+
+            const item = gm.getItem(fishId);
+            if (!item) return;
+
+            const stage = this.findGameStageComponent();
+            if (stage) {
+                const existing = stage.getFishNode?.(fishId);
+                if (existing && existing.isValid) {
+                    if (this.bindLocalSpriteToFishNode(existing, fishId)) {
+                        return;
+                    }
+                    if (remaining > 0) {
+                        this.scheduleOnce(() => run(remaining - 1), 0.08);
+                        return;
+                    }
+                    return;
+                }
+
+                // 兜底重建：ITEM_ADDED 可能发生在 GameStage 首次激活前。
+                if (typeof stage.initExistingItems === 'function') {
+                    stage.initExistingItems();
+                    const rebuilt = stage.getFishNode?.(fishId);
+                    if (rebuilt && rebuilt.isValid) {
+                        return;
+                    }
+                }
+            }
+
+            if (remaining <= 0) {
+                ccWarn(`[MultiPlayerController] 鱼节点补建失败: ${fishId}`);
+                return;
+            }
+
+            this.scheduleOnce(() => run(remaining - 1), 0.08);
+        };
+
+        this.scheduleOnce(() => run(retries), 0);
+    }
+
+    private findGameStageComponent(): any | null {
+        const scene = director.getScene();
+        if (!scene) return null;
+
+        const stack: Node[] = [scene];
+        while (stack.length > 0) {
+            const current = stack.pop();
+            if (!current || !current.isValid) {
+                continue;
+            }
+
+            const stage = current.getComponent('GameStage') as any;
+            if (stage) {
+                return stage;
+            }
+
+            current.children.forEach((child) => stack.push(child));
+        }
+
+        return null;
+    }
+
+    private bindLocalSpriteToFishNode(fishNode: Node, fishId: string): boolean {
+        const gm = GameManager.instance;
+        if (!gm) return false;
+
+        const spriteFrame = gm.getLocalFishSpriteFrame(fishId);
+        if (!spriteFrame || !spriteFrame.isValid) {
+            return false;
+        }
+
+        const fishController = fishNode.getComponent('FishController') as any;
+        const sprite = fishController?.fishSprite || fishNode.getComponent(Sprite);
+        if (!sprite) {
+            return false;
+        }
+
+        if (sprite.spriteFrame !== spriteFrame) {
+            sprite.spriteFrame = spriteFrame;
+        }
+        return true;
     }
 
 

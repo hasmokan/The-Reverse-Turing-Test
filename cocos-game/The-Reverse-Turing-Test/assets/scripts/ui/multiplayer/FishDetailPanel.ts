@@ -169,10 +169,10 @@ export class FishDetailPanel extends Component {
             fillTransform.setContentSize(new Size(420, 18));
             const fillSprite = fillNode.addComponent(Sprite);
             fillSprite.color = new Color(76, 175, 80, 255);
-            fillSprite.type = Sprite.Type.FILLED;
-            fillSprite.fillType = Sprite.FillType.HORIZONTAL;
-            fillSprite.fillStart = 0;
-            fillSprite.fillRange = 0;
+            // 兜底 UI 没有 spriteFrame，使用 FILLED 会触发 BarFilled UV 计算空指针。
+            // 这里改为 SIMPLE + scaleX 模拟进度，避免运行时崩溃。
+            fillSprite.type = Sprite.Type.SIMPLE;
+            fillNode.setScale(0, 1, 1);
 
             this.voteProgressBar = progressRoot;
             this.voteProgressFill = fillSprite;
@@ -530,7 +530,12 @@ export class FishDetailPanel extends Component {
         // 进度条
         if (this.voteProgressFill) {
             const progress = Math.min(1, count / BATTLE_CONSTANTS.ELIMINATION_THRESHOLD);
-            this.voteProgressFill.fillRange = progress;
+            if (this.voteProgressFill.type === Sprite.Type.FILLED) {
+                this.voteProgressFill.fillRange = progress;
+            } else {
+                const fillNode = this.voteProgressFill.node;
+                fillNode.setScale(progress, 1, 1);
+            }
 
             // 颜色
             if (count >= BATTLE_CONSTANTS.ELIMINATION_THRESHOLD) {
